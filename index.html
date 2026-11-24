@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dragon Quest: Tasks &amp; Focus</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ===== HEADER: player profile + currency ===== -->
+  <header class="app-header">
+    <div class="profile">
+      <div id="avatar" class="avatar" aria-hidden="true"></div>
+      <div class="profile-text">
+        <input id="playerName" class="name-input" type="text" maxlength="20" aria-label="Player name" spellcheck="false">
+        <div class="profile-sub">
+          <span id="playerTitle" class="title-badge"></span>
+          <span id="playerRank" class="rank-badge"></span>
+          <span id="playerLevel" class="level-badge"></span>
+        </div>
+        <div class="xp-wrap" title="Experience">
+          <div class="bar"><div id="xpFill" class="bar-fill"></div></div>
+          <span id="xpText" class="bar-label"></span>
+        </div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="gold-counter" title="Gold">
+        <span class="coin" aria-hidden="true"></span>
+        <span id="goldValue">0</span>
+      </div>
+      <button id="muteBtn" class="icon-btn" type="button" aria-label="Toggle sound">🔊</button>
+    </div>
+  </header>
+
+  <!-- ===== NAVIGATION ===== -->
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="quests" role="tab" type="button">Quests</button>
+    <button class="tab" data-tab="sanctuary" role="tab" type="button">Dragon Sanctuary</button>
+    <button class="tab" data-tab="market" role="tab" type="button">Dragon Market</button>
+    <button class="tab" data-tab="hall" role="tab" type="button">Hall of Fame</button>
+  </nav>
+
+  <main>
+    <!-- ===== MODULE B: QUEST BOARD ===== -->
+    <section id="tab-quests" class="panel active">
+      <!-- Status window: rendered by renderStatus() in tasks.js -->
+      <div id="statusWindow" class="card status-window"></div>
+
+      <form id="taskForm" class="card task-form" autocomplete="off">
+        <h2>Accept New Quest</h2>
+        <input id="taskTitle" type="text" maxlength="100" placeholder="What do you need to do?" required aria-label="Task name">
+        <div class="form-row">
+          <label>Category
+            <select id="taskCategory" required>
+              <option value="" selected disabled>Choose a category…</option>
+              <option value="Homework">School / Homework → trains Knowledge</option>
+              <option value="Work">Work → trains Work Ethic</option>
+              <option value="Personal">Chores / Life → trains Discipline</option>
+            </select>
+          </label>
+          <label>Difficulty
+            <select id="taskDifficulty">
+              <option value="Easy">Easy: +25 XP | +15 Gold</option>
+              <option value="Medium" selected>Medium: +50 XP | +35 Gold</option>
+              <option value="Hard">Hard: +100 XP | +75 Gold</option>
+            </select>
+          </label>
+        </div>
+        <button class="btn primary" type="submit">Accept Quest</button>
+      </form>
+
+      <h2 class="section-title">Quest Log</h2>
+      <div class="filters" role="group" aria-label="Filter quests">
+        <button class="chip active" data-filter="all" type="button">All</button>
+        <button class="chip" data-filter="active" type="button">Active</button>
+        <button class="chip" data-filter="completed" type="button">Completed</button>
+      </div>
+      <ul id="taskList" class="task-list"></ul>
+    </section>
+
+    <!-- ===== MODULE C: DRAGON SANCTUARY ===== -->
+    <section id="tab-sanctuary" class="panel">
+      <div class="sanctuary-grid">
+        <div class="card dragon-card">
+          <div id="dragonStage" class="dragon-stage"></div>
+          <input id="dragonName" class="name-input center" type="text" maxlength="20" aria-label="Dragon name" spellcheck="false">
+          <div id="dragonMeta" class="dragon-meta"></div>
+          <div class="growth-wrap">
+            <div class="bar tall"><div id="growthFill" class="bar-fill"></div></div>
+            <div class="growth-text"><span id="growthText"></span><span id="speedText"></span></div>
+          </div>
+          <div id="adultBanner" class="banner hidden">
+            Your dragon is fully grown! You can now archive it to the Hall of Fame and purchase a New Egg in the Dragon Market.
+          </div>
+        </div>
+
+        <div class="card timer-card">
+          <h2>Focus Timer</h2>
+          <div id="clock" class="clock">25:00</div>
+          <div id="presets" class="presets">
+            <button class="chip" data-min="15" type="button">15 min</button>
+            <button class="chip active" data-min="25" type="button">25 min</button>
+            <button class="chip" data-min="45" type="button">45 min</button>
+            <button class="chip" data-min="60" type="button">60 min</button>
+          </div>
+          <label class="custom-min">Custom minutes (1–180)
+            <input id="customMin" type="number" min="1" max="180" step="1" placeholder="e.g. 30">
+          </label>
+          <div class="controls">
+            <button id="startBtn" class="btn primary" type="button">Start Focus</button>
+            <button id="pauseBtn" class="btn" type="button">Pause</button>
+            <button id="abandonBtn" class="btn danger" type="button">Abandon Session</button>
+          </div>
+          <div id="sessionNote" class="note"></div>
+          <div class="items-row">
+            <span id="itemBerry" class="item-pill"></span>
+            <button id="usePotionBtn" class="btn small" type="button"></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== MODULE D: DRAGON MARKET ===== -->
+    <section id="tab-market" class="panel"><div id="marketRoot"></div></section>
+
+    <!-- ===== MODULE E: HALL OF FAME ===== -->
+    <section id="tab-hall" class="panel"><div id="hallRoot"></div></section>
+  </main>
+
+  <footer class="app-footer">
+    <span>Progress is saved automatically in this browser.</span>
+    <button id="resetBtn" class="btn danger small" type="button">Reset Save Data</button>
+  </footer>
+
+  <!-- Overlays -->
+  <div id="notifyLayer" class="notify-layer" aria-live="polite"></div>
+  <div id="floatLayer" class="float-layer" aria-live="polite"></div>
+  <div id="modalRoot"></div>
+
+  <!-- Classic scripts (no modules) so this file works when opened directly. Order matters. -->
+  <script src="js/state.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/dragon.js"></script>
+  <script src="js/tasks.js"></script>
+  <script src="js/timer.js"></script>
+  <script src="js/shop.js"></script>
+  <script src="js/hall.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
