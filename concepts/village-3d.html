@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Dragon Village 3D</title>
+<style>
+  /* Concept: Clash-of-Clans-style village in real 3D, built from Kenney CC0 model kits.
+     Three.js + models are local files (vendor/, assets/model-pack.js), so this works offline from file://. */
+  :root { --panel: rgba(6,16,38,.88); --line: #1d5aa8; --line-hi: #4aa3ff; --text: #d6e8ff; --muted: #7f9bc4; --cyan: #6be6ff; --gold: #f5b942; --glow: rgba(74,163,255,.45); }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #2b5427; font-family: "Bahnschrift", "Segoe UI", system-ui, sans-serif; color: var(--text); user-select: none; -webkit-user-select: none; }
+  canvas { display: block; touch-action: none; }
+  .win { position: fixed; background: var(--panel); border: 1px solid var(--line-hi); box-shadow: 0 0 16px var(--glow); backdrop-filter: blur(3px); }
+  .profile { top: 12px; left: 12px; display: flex; align-items: center; gap: .7rem; padding: .5rem .8rem .5rem .5rem; }
+  .lvl { width: 46px; height: 46px; display: grid; place-content: center; font: 800 1.2rem Consolas, monospace; color: #fff; background: rgba(30,90,200,.5);
+         border: 1px solid var(--cyan); clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); text-shadow: 0 0 8px var(--cyan); }
+  .pname { font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  .psub { font-size: .7rem; letter-spacing: .14em; color: #9b7bff; text-transform: uppercase; }
+  .xp { height: 5px; width: 130px; background: rgba(0,0,0,.5); border: 1px solid var(--line); margin-top: .3rem; }
+  .xp i { display: block; height: 100%; width: 62%; background: linear-gradient(90deg, #1b56c8, var(--cyan)); box-shadow: 0 0 8px var(--glow); }
+  .res { top: 12px; right: 12px; padding: .45rem .7rem; display: grid; gap: .35rem; min-width: 190px; }
+  .res div { display: flex; justify-content: space-between; align-items: center; gap: 1rem; font: 700 .95rem Consolas, monospace; }
+  .res small { font: 700 .68rem "Bahnschrift", sans-serif; letter-spacing: .16em; color: var(--muted); }
+  .res .g { color: var(--gold); } .res .e { color: var(--cyan); }
+  .btn { position: fixed; background: linear-gradient(180deg, rgba(60,130,255,.6), rgba(30,80,200,.6)); color: #fff; border: 1px solid var(--line-hi);
+         font: 800 .95rem "Bahnschrift", sans-serif; letter-spacing: .16em; text-transform: uppercase; cursor: pointer; box-shadow: 0 0 16px var(--glow); text-shadow: 0 0 8px var(--cyan); }
+  .btn:hover { border-color: var(--cyan); box-shadow: 0 0 22px var(--glow); }
+  .btn.on { background: linear-gradient(180deg, rgba(245,185,66,.75), rgba(180,120,20,.75)); border-color: var(--gold); }
+  .build { right: 12px; bottom: 12px; width: 120px; height: 64px; font-size: 1.05rem; }
+  .shop { right: 12px; bottom: 86px; width: 120px; height: 44px; }
+  .quests { left: 12px; bottom: 12px; width: 120px; height: 64px; background: rgba(6,16,38,.88); }
+  .zoom { position: fixed; right: 144px; bottom: 12px; display: grid; gap: 6px; }
+  .zoom .btn, .thsel .btn { position: static; }
+  .zoom .btn { width: 40px; height: 40px; font-size: 1.3rem; letter-spacing: 0; }
+  .thsel { left: 144px; bottom: 12px; padding: .4rem .5rem; display: flex; align-items: center; gap: .35rem; }
+  .thsel span { font-size: .68rem; letter-spacing: .16em; color: var(--muted); margin-right: .2rem; }
+  .thsel .btn { width: 38px; height: 34px; font-size: .8rem; letter-spacing: .04em; }
+  .info { left: 50%; bottom: 90px; transform: translateX(-50%); padding: .6rem .9rem; display: none; text-align: center; min-width: 260px; max-width: 92vw; }
+  .info h3 { margin: 0 0 .15rem; font-size: .95rem; letter-spacing: .16em; text-transform: uppercase; color: var(--cyan); text-shadow: 0 0 10px var(--glow); }
+  .info p { margin: .2rem 0 .5rem; font-size: .8rem; }
+  .info .btn { position: static; padding: .45rem .9rem; font-size: .75rem; margin: 0 .2rem; }
+  .toast { top: 84px; left: 50%; transform: translateX(-50%); padding: .5rem .9rem; font: .8rem Consolas, monospace; display: none; }
+  .loading { position: fixed; inset: 0; display: grid; place-content: center; background: #02050d; color: var(--cyan); letter-spacing: .3em; font-weight: 700; z-index: 10; }
+  @media (max-width: 700px) { .res { min-width: 150px; } .xp { width: 90px; } .thsel { left: 12px; bottom: 86px; } .zoom { right: 140px; } }
+</style>
+</head>
+<body>
+<div class="loading" id="loading">[ SYSTEM ] LOADING VILLAGE…</div>
+<div class="win profile"><div class="lvl">6</div><div><div class="pname">Hunter</div><div class="psub">Rank D · Apprentice Mage</div><div class="xp"><i></i></div></div></div>
+<div class="win res"><div><small>GOLD</small><span class="g">545 G</span></div><div><small>ELEMENTS</small><span class="e">5 / 16</span></div></div>
+<button class="btn quests" type="button" onclick="location.href='../index.html'">◂ Quests</button>
+<div class="win thsel" id="thsel"><span>TOWN HALL</span></div>
+<div class="zoom"><button class="btn" id="zin" type="button" aria-label="Zoom in">+</button><button class="btn" id="zout" type="button" aria-label="Zoom out">−</button></div>
+<button class="btn shop" type="button" data-toast="Shop: concept only">Shop</button>
+<button class="btn build" type="button" data-toast="Build menu: concept only">Build</button>
+<div class="win info" id="info"><h3 id="infoName"></h3><p id="infoText"></p>
+  <button class="btn" type="button" data-toast="Info: concept only">Info</button><button class="btn" type="button" data-toast="Upgrade: concept only">Upgrade</button></div>
+<div class="win toast" id="toast"></div>
+
+<script src="../vendor/three/three.min.js"></script>
+<script src="../vendor/three/OrbitControls.js"></script>
+<script src="../vendor/three/GLTFLoader.js"></script>
+<script src="../assets/model-pack.js"></script>
+<script>
+/* ============================ Renderer, camera, lights ============================ */
+var GRID = 20, HALF = GRID / 2;
+function col(hex) { return new THREE.Color(hex).convertSRGBToLinear(); }   // our hex colours are sRGB
+var renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+document.body.prepend(renderer.domElement);
+
+var scene = new THREE.Scene();
+scene.background = col('#2b5427');
+scene.fog = new THREE.Fog(col('#2b5427'), 60, 100);
+
+// Fixed Clash-of-Clans angle: zoom + pan only, never rotate.
+var camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.5, 300);
+camera.position.copy(new THREE.Vector3(1, 1.35, 1).normalize().multiplyScalar(54));
+var controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableRotate = false;
+controls.screenSpacePanning = false;
+controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+controls.minDistance = 14; controls.maxDistance = 70;
+controls.enableDamping = true; controls.dampingFactor = 0.12;
+var PAN_LIMIT = 16;
+controls.addEventListener('change', function () {
+  var t = controls.target, x = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, t.x)), z = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, t.z));
+  var dx = x - t.x, dz = z - t.z;
+  if (dx || dz) { t.x += dx; t.z += dz; camera.position.x += dx; camera.position.z += dz; }
+});
+function zoomBy(f) {
+  var off = camera.position.clone().sub(controls.target);
+  camera.position.copy(controls.target).add(off.setLength(Math.max(controls.minDistance, Math.min(controls.maxDistance, off.length() * f))));
+}
+document.getElementById('zin').onclick = function () { zoomBy(0.8); };
+document.getElementById('zout').onclick = function () { zoomBy(1.25); };
+
+scene.add(new THREE.HemisphereLight('#eaf6ff', '#4a6a35', 0.75));
+var sun = new THREE.DirectionalLight('#fff1d6', 1.0);
+sun.position.set(-14, 26, 10); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 80 });
+sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.02;
+scene.add(sun);
+
+/* ============================ Kit model loading ============================ */
+var KIT = {};
+// The Nature kit uses a mint/teal palette; remap its materials (by name) to Clash-of-Clans-like colours.
+var PALETTE = {
+  leafsGreen: '#4f9e3a', leafsDark: '#2f6e34', leafsFall: '#c9852f', grass: '#5fae45',
+  woodBark: '#7a5232', woodBarkDark: '#5e3d26', woodInner: '#d9b98a', dirt: '#8a6a45',
+  stone: '#a3a8aa', stoneDark: '#767d80'
+};
+function loadKits(done) {
+  var pack = window.MODEL_PACK, keys = Object.keys(pack.glb), left = keys.length;
+  var manager = new THREE.LoadingManager();
+  // Models reference "Textures/colormap.png": serve the embedded data-URI version instead.
+  manager.setURLModifier(function (url) {
+    for (var k in pack.tex) if (url.slice(-k.length) === k) return pack.tex[k];
+    return url;
+  });
+  var loader = new THREE.GLTFLoader(manager);
+  keys.forEach(function (key) {
+    var bin = atob(pack.glb[key]), buf = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    loader.parse(buf.buffer, key.split('/')[0] + '/', function (gltf) {
+      gltf.scene.traverse(function (o) { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.material.metalness = 0; o.material.roughness = Math.max(0.7, o.material.roughness);
+        if (PALETTE[o.material.name]) o.material.color.copy(col(PALETTE[o.material.name])); } });
+      KIT[key.split('/')[1]] = gltf.scene;
+      if (--left === 0) done();
+    }, function (err) { console.error('Model failed', key, err); if (--left === 0) done(); });
+  });
+}
+// Place a kit piece: kit(name, x, y, z, rotationY, scale, parent)
+function kit(name, x, y, z, rot, scale, parent) {
+  var src = KIT[name];
+  if (!src) { console.warn('missing', name); return new THREE.Group(); }
+  var o = src.clone(true);
+  o.position.set(x, y, z); o.rotation.y = rot || 0;
+  if (scale) typeof scale === 'number' ? o.scale.setScalar(scale) : o.scale.set(scale[0], scale[1], scale[2]);
+  parent.add(o); return o;
+}
+// Recolour a piece (materials are cloned so other copies keep their colours).
+function tint(o, color) {
+  o.traverse(function (m) { if (m.isMesh) { m.material = m.material.clone(); m.material.color.copy(col(color)); } });
+  return o;
+}
+function glow(geo, color, intensity, x, y, z, parent) {
+  var m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: col(color), emissive: col(color), emissiveIntensity: intensity || 1, roughness: 0.35 }));
+  m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m;
+}
+function egg(color, x, y, z, parent, s) {
+  var e = new THREE.Mesh(new THREE.SphereGeometry(0.3 * (s || 1), 20, 16), new THREE.MeshStandardMaterial({ color: col(color), roughness: 0.35 }));
+  e.scale.y = 1.35; e.position.set(x, y, z); e.castShadow = true; parent.add(e); return e;
+}
+var rng = (function (s) { return function () { s |= 0; s = s + 0x6D2B79F5 | 0; var t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; })(11);
+
+/* ============================ Town Hall levels ============================
+   Built on a 3x3 "module" grid (one castle-kit piece = 1 module), then scaled to the 4x4-tile footprint.
+   Each level visibly adds to the previous one.
+   HEIGHT CAP: no level may be taller than level 3 (keep top ~4.1 modules). Later levels grow in width and detail. */
+// Small stone-and-wood hall (Fantasy Town kit). Wall panels sit on a tile's +x edge; rotate to use other sides.
+function hall(parent, x, z, s) {
+  var h = new THREE.Group(); h.position.set(x, 0, z); h.scale.setScalar(s); parent.add(h);
+  kit('wall-window-stone', 0, 0, 0, 0, null, h);               // +x side (faces the camera)
+  kit('wall-door', 0, 0, 0, -Math.PI / 2, null, h);            // +z side (faces the camera)
+  kit('wall', 0, 0, 0, Math.PI, null, h);
+  kit('wall', 0, 0, 0, Math.PI / 2, null, h);
+  kit('roof-high-point', 0, 1, 0, 0, null, h);
+  kit('chimney', 0, 1.15, 0, Math.PI / 2, null, h);
+  return h;
+}
+function keep(parent, pieces, x, z) {                          // stack castle tower pieces bottom-up
+  var y = 0, heights = { 'tower-square-base': 1.01, 'tower-square-base-color': 1.01, 'tower-square-base-border': 0.45, 'tower-square-mid': 1.01,
+    'tower-square-mid-windows': 1.01, 'tower-square-mid-door': 1.01, 'tower-square-mid-color': 0.2, 'tower-square-top': 0.3, 'tower-square-top-color': 0.38,
+    'tower-hexagon-base': 1.31, 'tower-hexagon-mid': 0.46, 'tower-hexagon-top': 0.13, 'tower-base': 1.31 };
+  pieces.forEach(function (p) { kit(p, x, y, z, 0, null, parent); y += heights[p] || 0; });
+  return y;                                                     // height of the top
+}
+function crystal(parent, y, size) {
+  var c = glow(new THREE.OctahedronGeometry(0.22 * size, 0), '#6be6ff', 1.3, 0, y, 0, parent);
+  c.userData.bob = y;
+  var l = new THREE.PointLight('#6be6ff', 0.9, 5); l.position.set(0, y, 0); parent.add(l);
+  return c;
+}
+var TOWN_HALLS = {
+  1: function (g) {          // Modest stone hall with lanterns
+    hall(g, 0, 0, 1.6);
+    kit('lantern', 1.15, 0, 1.15, 0, 0.9, g); kit('lantern', -1.15, 0, 1.15, 0, 0.9, g);
+    kit('banner-red', 0.2, 0.25, 0, 0, 0.9, g);
+    kit('flower_redA', 1.1, 0, -0.9, 0, 2, g); kit('plant_bush', -1.1, 0, -1, 0, 2, g);
+  },
+  2: function (g) {          // Stone keep tower + the old hall as an annex
+    var top = keep(g, ['tower-square-base', 'tower-square-mid-windows'], -0.45, -0.45);
+    kit('tower-square-top-roof-high', -0.45, top, -0.45, 0, null, g);
+    kit('flag', -0.45, top + 1.3, -0.45, 0, null, g);
+    hall(g, 0.75, 0.75, 1.05);
+    kit('lantern', 1.35, 0, -0.2, 0, 0.8, g); kit('lantern', -0.2, 0, 1.35, 0, 0.8, g);
+    kit('banner-red', -0.45, 1.2, -0.45, 0, null, g);
+  },
+  3: function (g) {          // Walled keep with corner towers and a gate
+    var top = keep(g, ['tower-square-base-color', 'tower-square-mid-windows', 'tower-square-mid'], 0, 0);
+    kit('tower-square-top-roof-high-windows', 0, top, 0, 0, null, g);
+    crystal(g, top + 1.45, 1);
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (p) {
+      var t = keep(g, ['tower-hexagon-base'], p[0], p[1]); kit('tower-hexagon-roof', p[0], t, p[1], 0, null, g);
+    });
+    kit('wall-corner', 0, 0, -1, 0, [1, 0.65, 1], g); kit('wall-corner', -1, 0, 0, 0, [1, 0.65, 1], g); kit('wall-corner', 1, 0, 0, 0, [1, 0.65, 1], g);
+    kit('gate', 0, 0, 1, Math.PI / 2, null, g);
+    kit('flag-banner-long', 0.5, 0.6, 0, 0, null, g);
+  },
+  4: function (g) {          // Grand citadel: NOT taller than level 3 (height cap); grows in richness instead
+    var top = keep(g, ['tower-square-base-border', 'tower-square-base-color', 'tower-square-mid-windows', 'tower-square-mid-color', 'tower-square-top-color'], 0, 0);
+    kit('tower-square-top-roof-rounded', 0, top, 0, 0, null, g);                       // keep ends ~4.0 high (level 3: ~4.1)
+    crystal(g, top + 1.25, 1.5);
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (p) {
+      var t = keep(g, ['tower-hexagon-base', 'tower-hexagon-mid'], p[0], p[1]);        // two-storey corner towers
+      kit('tower-hexagon-roof', p[0], t, p[1], 0, null, g);
+      kit('flag-wide', p[0], t + 0.8, p[1], Math.PI / 4, null, g);
+    });
+    kit('wall-corner', 0, 0, -1, 0, [1, 0.65, 1], g); kit('wall-corner', -1, 0, 0, 0, [1, 0.65, 1], g); kit('wall-corner', 1, 0, 0, 0, [1, 0.65, 1], g);
+    kit('gate', 0, 0, 1, Math.PI / 2, null, g);
+    kit('stairs-stone', 0, 0, 1.45, 0, [0.9, 0.5, 0.6], g);                            // steps up to the gate
+    kit('flag-banner-long', 0.5, 0.6, 0, 0, null, g); kit('flag-banner-long', 0, 0.6, 0.5, -Math.PI / 2, null, g);
+    kit('lantern', 1.5, 0, 0.55, 0, 0.7, g); kit('lantern', 0.55, 0, 1.5, 0, 0.7, g);
+  }
+};
+var thLevel = 4;
+
+/* ============================ Buildings ============================ */
+function habitat(color, decorate) {
+  return function (g) {
+    var base = kit('platform_stone', 0, 0.05, 0, 0, [3.2, 3, 3.9], g);
+    var ring = glow(new THREE.TorusGeometry(1.28, 0.05, 6, 32), color, 0.8, 0, 0.18, 0, g); ring.rotation.x = Math.PI / 2;
+    decorate(g);
+  };
+}
+var DESC = {
+  habitat: 'Home for dragons of this element. Upgrading adds new structures inside.',
+  townhall: 'Heart of the village. Its level follows your player level and unlocks buildings.',
+  lab: 'Researches dragon evolution (Egg → Hatchling → Juvenile → Adult).',
+  camp: 'Levels dragons up, one at a time, like the Clash of Clans Laboratory.',
+  hatchery: 'Breeding nest: produces a new egg when you want one.',
+  altar: 'Hero altar: home of one of up to 3 Hero dragons.'
+};
+var MODELS = {
+  townhall: { size: 4, name: 'Town Hall', desc: DESC.townhall, build: function (g) {
+    var inner = new THREE.Group(); inner.scale.setScalar(1.25); g.add(inner);
+    TOWN_HALLS[thLevel](inner);
+  } },
+  fire: { size: 3, name: 'Fire Habitat', desc: DESC.habitat, build: habitat('#ff5a36', function (g) {
+    tint(kit('rock_tallA', -0.75, 0.1, -0.6, 0.4, 1.6, g), '#6b3a2a'); tint(kit('rock_tallB', 0.75, 0.1, -0.8, 2, 1.2, g), '#6b3a2a');
+    var lava = glow(new THREE.CylinderGeometry(0.55, 0.55, 0.05, 24), '#ff6a1a', 1.1, -0.1, 0.17, 0.25, g);
+    var l = new THREE.PointLight('#ff6a1a', 1, 4); l.position.set(-0.1, 0.8, 0.25); g.add(l);
+    egg('#ff4d2e', -0.1, 0.55, 0.25, g);
+  }) },
+  ice: { size: 3, name: 'Ice Habitat', desc: DESC.habitat, build: habitat('#8fe3ff', function (g) {
+    tint(kit('rock_tallC', -0.7, 0.1, -0.7, 0.2, 1.5, g), '#d8f6ff'); tint(kit('rock_tallA', 0.8, 0.1, -0.55, 1.4, 1.1, g), '#bfeaff');
+    tint(kit('stone_tallA', -0.85, 0.1, 0.6, 0.8, 1.2, g), '#e6fbff');
+    egg('#8fe3ff', 0.25, 0.55, 0.3, g);
+  }) },
+  forest: { size: 3, name: 'Forest Habitat', desc: DESC.habitat, build: habitat('#3fbf5a', function (g) {
+    kit('tree_oak', -0.75, 0.1, -0.7, 0, 1.6, g); kit('plant_bushDetailed', 0.8, 0.1, -0.7, 0, 1.6, g);
+    kit('mushroom_redGroup', -0.8, 0.1, 0.7, 0, 2, g); kit('flower_yellowA', 0.8, 0.1, 0.75, 0, 2, g); kit('flower_purpleA', 0.6, 0.1, 0.95, 0, 2, g);
+    egg('#3fbf5a', 0.15, 0.55, 0.15, g);
+  }) },
+  storm: { size: 3, name: 'Storm Habitat', desc: DESC.habitat, build: habitat('#8a7dff', function (g) {
+    tint(kit('rock_tallB', -0.7, 0.1, -0.7, 0.6, 1.5, g), '#4b4766');
+    [[-0.7, 2.2, -0.7, 0.45], [-0.35, 2.1, -0.6, 0.32], [-0.95, 2.05, -0.4, 0.3]].forEach(function (c) {
+      var cl = new THREE.Mesh(new THREE.SphereGeometry(c[3], 10, 8), new THREE.MeshStandardMaterial({ color: col('#5b5670'), flatShading: true }));
+      cl.position.set(c[0], c[1], c[2]); cl.castShadow = true; g.add(cl);
+    });
+    glow(new THREE.OctahedronGeometry(0.15, 0), '#ffe14d', 1.4, -0.7, 1.75, -0.7, g);
+    egg('#8a7dff', 0.3, 0.55, 0.3, g);
+  }) },
+  cosmic: { size: 3, name: 'Cosmic Habitat', desc: DESC.habitat, build: habitat('#c04dff', function (g) {
+    tint(kit('statue_ring', -0.6, 0.1, -0.6, Math.PI / 4, 1.8, g), '#6a4bd8'); tint(kit('statue_obelisk', 0.85, 0.1, -0.75, 0, 1.5, g), '#4a3680');
+    glow(new THREE.SphereGeometry(0.2, 16, 12), '#e6a0ff', 1.2, -0.6, 0.95, -0.6, g);
+    egg('#c04dff', 0.25, 0.55, 0.35, g);
+  }) },
+  lab: { size: 2, name: 'Research Lab', desc: DESC.lab, build: function (g) {
+    var h = hall(g, 0, 0, 1.3);
+    kit('statue_column', 0.75, 0, 0.75, 0, 1.3, g);
+    glow(new THREE.SphereGeometry(0.16, 16, 12), '#9b7bff', 1.4, 0.75, 1.42, 0.75, g);
+    var l = new THREE.PointLight('#9b7bff', 0.8, 3); l.position.set(0.75, 1.5, 0.75); g.add(l);
+  } },
+  camp: { size: 3, name: 'Training Camp', desc: DESC.camp, build: function (g) {
+    var yard = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.04, 2.9), new THREE.MeshStandardMaterial({ color: col('#b89a6a'), roughness: 1 }));
+    yard.position.y = 0.02; yard.receiveShadow = true; g.add(yard);
+    for (var i = -1; i <= 1; i++) {                               // fence on all four outer edges
+      kit('fence', 1, 0, i, 0, null, g); kit('fence', -1, 0, i, Math.PI, null, g);
+      kit(i === 0 ? 'fence-gate' : 'fence', i, 0, 1, -Math.PI / 2, null, g); kit('fence', i, 0, -1, Math.PI / 2, null, g);
+    }
+    kit('tent_detailedOpen', -0.6, 0.05, -0.6, Math.PI / 4, 1.8, g);
+    kit('campfire_stones', 0.5, 0.05, 0.3, 0, 1.6, g);
+    var f = new THREE.PointLight('#ff8a3a', 0.8, 3); f.position.set(0.5, 0.5, 0.3); g.add(f);
+    kit('log_stack', 0.7, 0.05, -0.8, 0, 1.6, g); kit('stall-red', -0.75, 0, 0.75, Math.PI / 2, 0.9, g);
+  } },
+  hatchery: { size: 2, name: 'Hatchery', desc: DESC.hatchery, build: function (g) {
+    kit('platform_stone', 0, 0.05, 0, 0, [2.1, 2, 2.6], g);
+    kit('grass_large', -0.55, 0.12, -0.5, 0, 2, g); kit('flower_redA', 0.55, 0.12, -0.55, 0, 2, g);
+    egg('#ff5a36', -0.2, 0.42, 0.05, g, 0.75); egg('#8fe3ff', 0.2, 0.42, 0, g, 0.75); egg('#3fbf5a', 0, 0.42, 0.32, g, 0.75);
+  } },
+  altar: { size: 1, name: 'Hero Altar', desc: DESC.altar, build: function (g) {
+    tint(kit('statue_column', 0, 0, 0, 0, 0.9, g), '#e0c27a');
+    var c = glow(new THREE.OctahedronGeometry(0.15, 0), '#f5b942', 1.3, 0, 1.05, 0, g); c.userData.bob = 1.05;
+  } },
+  tree: { size: 1, name: 'Tree', desc: 'Decoration.', build: function (g) { kit(rng() < 0.5 ? 'tree_oak' : 'tree_default', 0, 0, 0, rng() * 6, 1.6, g); } },
+  wall: { size: 1, name: 'Wall', desc: 'Wall segment.', build: function () {} }
+};
+
+/* ============================ World ============================ */
+var buildings = [];
+function buildWorld() {
+  // Meadow + checkered buildable base
+  var meadow = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), new THREE.MeshStandardMaterial({ color: col('#3f7a32'), roughness: 1 }));
+  meadow.rotation.x = -Math.PI / 2; meadow.position.y = -0.03; meadow.receiveShadow = true; scene.add(meadow);
+  var tileGeo = new THREE.BoxGeometry(1, 0.1, 1), mA = new THREE.MeshStandardMaterial({ color: col('#62a843'), roughness: 1 }), mB = new THREE.MeshStandardMaterial({ color: col('#6bb24a'), roughness: 1 });
+  for (var i = 0; i < GRID; i++) for (var j = 0; j < GRID; j++) {
+    var t = new THREE.Mesh(tileGeo, (i + j) % 2 ? mA : mB); t.position.set(i - HALF + 0.5, -0.05, j - HALF + 0.5); t.receiveShadow = true; scene.add(t);
+  }
+  // River with sandy banks
+  function strip(x, w, color, y, opacity) {
+    var s = new THREE.Mesh(new THREE.PlaneGeometry(w, 130), new THREE.MeshStandardMaterial({ color: col(color), roughness: opacity ? 0.15 : 1, transparent: !!opacity, opacity: opacity || 1 }));
+    s.rotation.x = -Math.PI / 2; s.rotation.z = 0.25; s.position.set(x, y, 0); s.receiveShadow = true; scene.add(s);
+  }
+  strip(-HALF - 9, 9, '#e2cf96', 0.0); strip(-HALF - 9, 6, '#3a93cf', 0.01, 0.93);
+  function inRiver(x, z) { return Math.abs(x - (-HALF - 9 - Math.tan(0.25) * z)) < 5.5; }
+  // Forest, rocks and flowers from the Nature kit
+  var trees = ['tree_default', 'tree_oak', 'tree_fat', 'tree_pineTallA', 'tree_pineRoundA', 'tree_pineDefaultA', 'tree_default_dark', 'tree_oak_dark'];
+  for (var k = 0; k < 340; k++) {
+    var x = (rng() - 0.5) * 100, z = (rng() - 0.5) * 100;
+    if (Math.abs(x) < HALF + 2.5 && Math.abs(z) < HALF + 2.5) continue;
+    if (inRiver(x, z) || (x > 4 && z > 4 && x + z < 40)) continue;
+    var tr = kit(trees[Math.floor(rng() * trees.length)], x, 0, z, rng() * 6, 2.2 + rng() * 1.2, scene);
+    var near = Math.abs(x) < HALF + 8 && Math.abs(z) < HALF + 8;
+    tr.traverse(function (o) { if (o.isMesh) o.castShadow = near; });
+  }
+  var deco = ['rock_largeA', 'rock_largeB', 'stone_largeA', 'plant_bushDetailed', 'flower_redA', 'flower_yellowA', 'stump_round', 'mushroom_redGroup', 'log_stack'];
+  for (var r = 0; r < 90; r++) {
+    var rx = (rng() - 0.5) * 60, rz = (rng() - 0.5) * 60;
+    if (Math.abs(rx) < HALF + 1.2 && Math.abs(rz) < HALF + 1.2) continue;
+    if (inRiver(rx, rz)) continue;
+    kit(deco[Math.floor(rng() * deco.length)], rx, 0, rz, rng() * 6, 2 + rng(), scene);
+  }
+
+  buildings = [
+    { type: 'townhall', x: 8, y: 8 },
+    { type: 'altar', x: 7, y: 7 }, { type: 'altar', x: 12, y: 7 }, { type: 'altar', x: 7, y: 12 },
+    { type: 'fire', x: 2, y: 2 }, { type: 'ice', x: 15, y: 2 }, { type: 'cosmic', x: 8, y: 1 },
+    { type: 'forest', x: 2, y: 15 }, { type: 'storm', x: 15, y: 15 },
+    { type: 'lab', x: 2, y: 9 }, { type: 'camp', x: 15, y: 8 }, { type: 'hatchery', x: 9, y: 16 },
+    { type: 'tree', x: 0, y: 0 }, { type: 'tree', x: 19, y: 19 }, { type: 'tree', x: 0, y: 19 }, { type: 'tree', x: 19, y: 0 }
+  ];
+  for (var w = 6; w <= 13; w++) {
+    [[w, 6], [w, 13], [6, w], [13, w]].forEach(function (p) {
+      if (p[1] === 13 && (p[0] === 9 || p[0] === 10)) return;   // gate gap
+      if (!buildings.some(function (b) { return b.type === 'wall' && b.x === p[0] && b.y === p[1]; })) buildings.push({ type: 'wall', x: p[0], y: p[1] });
+    });
+  }
+  buildings.forEach(function (b) {
+    b.group = new THREE.Group(); b.group.userData.building = b;
+    MODELS[b.type].build(b.group);
+    b.group.position.copy(worldPos(b, b.x, b.y));
+    scene.add(b.group);
+  });
+  rebuildWalls();
+}
+function worldPos(b, x, y) { var s = MODELS[b.type].size; return new THREE.Vector3(x - HALF + s / 2, 0, y - HALF + s / 2); }
+
+// Walls: one crenellated block per tile (Castle kit 'wall-corner').
+function rebuildWalls() {
+  var at = {};
+  buildings.forEach(function (b) { if (b.type === 'wall') at[b.x + ',' + b.y] = true; });
+  buildings.forEach(function (b) {
+    if (b.type !== 'wall') return;
+    while (b.group.children.length) b.group.remove(b.group.children[0]);
+    // Every wall tile is a crenellated stone block, so neighbouring tiles join into one solid wall.
+    kit('wall-corner', 0, 0, 0, 0, [1, 0.65, 1], b.group);
+  });
+}
+
+function setTownHall(level) {
+  thLevel = level;
+  var th = buildings.filter(function (b) { return b.type === 'townhall'; })[0];
+  while (th.group.children.length) th.group.remove(th.group.children[0]);
+  MODELS.townhall.build(th.group);
+  document.querySelectorAll('#thsel .btn').forEach(function (b) { b.classList.toggle('on', Number(b.dataset.l) === level); });
+  if (selected === th) select(th);
+}
+
+/* ============================ Select & drag ============================ */
+var ray = new THREE.Raycaster(), mouse = new THREE.Vector2(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+var pending = null, drag = null, selected = null;
+var footprint = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: '#f5b942', transparent: true, opacity: 0.45, depthWrite: false }));
+footprint.rotation.x = -Math.PI / 2; footprint.visible = false; scene.add(footprint);
+function setMouse(e) { mouse.x = e.clientX / innerWidth * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1; ray.setFromCamera(mouse, camera); }
+function groundHit() { var p = new THREE.Vector3(); return ray.ray.intersectPlane(groundPlane, p) ? p : null; }
+function buildingAt(e) {
+  setMouse(e);
+  var hits = ray.intersectObjects(buildings.map(function (b) { return b.group; }), true);
+  for (var i = 0; i < hits.length; i++) { var o = hits[i].object; while (o && !o.userData.building) o = o.parent; if (o) return o.userData.building; }
+  return null;
+}
+function overlaps(b, x, y) {
+  var s = MODELS[b.type].size;
+  if (x < 0 || y < 0 || x + s > GRID || y + s > GRID) return true;
+  return buildings.some(function (o) { if (o === b) return false; var t = MODELS[o.type].size; return x < o.x + t && x + s > o.x && y < o.y + t && y + s > o.y; });
+}
+function showFootprint(b, x, y, color) {
+  var s = MODELS[b.type].size, p = worldPos(b, x, y);
+  footprint.scale.set(s, s, 1); footprint.position.set(p.x, 0.03, p.z); footprint.material.color.copy(col(color)); footprint.visible = true;
+}
+function select(b) {
+  selected = b;
+  var info = document.getElementById('info');
+  if (!b) { info.style.display = 'none'; footprint.visible = false; return; }
+  var lvl = b.type === 'townhall' ? thLevel : 1;
+  document.getElementById('infoName').textContent = MODELS[b.type].name + (b.type === 'wall' || b.type === 'tree' ? '' : ' · Level ' + lvl);
+  document.getElementById('infoText').textContent = MODELS[b.type].desc;
+  info.style.display = 'block';
+  showFootprint(b, b.x, b.y, '#f5b942');
+}
+addEventListener('pointerdown', function (e) {                // capture phase: runs before the camera controls
+  if (e.target !== renderer.domElement || !e.isPrimary || e.button > 0) return;
+  var b = buildingAt(e);
+  if (!b) { pending = { empty: true, x: e.clientX, y: e.clientY }; return; }
+  e.stopPropagation();
+  var p = groundHit();
+  pending = { b: b, x: e.clientX, y: e.clientY, offX: p.x - b.group.position.x, offZ: p.z - b.group.position.z };
+}, true);
+addEventListener('pointermove', function (e) {
+  if (!pending || pending.empty) return;
+  if (!drag && Math.hypot(e.clientX - pending.x, e.clientY - pending.y) > 6) { drag = { b: pending.b, x: pending.b.x, y: pending.b.y, ok: true }; select(drag.b); }
+  if (!drag) return;
+  setMouse(e);
+  var p = groundHit(); if (!p) return;
+  var s = MODELS[drag.b.type].size;
+  drag.x = Math.round(p.x - pending.offX + HALF - s / 2); drag.y = Math.round(p.z - pending.offZ + HALF - s / 2);
+  drag.ok = !overlaps(drag.b, drag.x, drag.y);
+  var wp = worldPos(drag.b, drag.x, drag.y); drag.b.group.position.set(wp.x, 0.3, wp.z);
+  showFootprint(drag.b, drag.x, drag.y, drag.ok ? '#50ff8c' : '#ff4660');
+});
+addEventListener('pointerup', function (e) {
+  if (!pending) return;
+  var moved = Math.hypot(e.clientX - pending.x, e.clientY - pending.y) > 6;
+  if (drag) {
+    if (drag.ok) { drag.b.x = drag.x; drag.b.y = drag.y; }
+    drag.b.group.position.copy(worldPos(drag.b, drag.b.x, drag.b.y));
+    if (drag.b.type === 'wall') rebuildWalls();
+    select(drag.b); drag = null;
+  } else if (!moved) select(pending.empty ? null : pending.b);
+  pending = null;
+});
+
+/* ============================ HUD ============================ */
+var toastTimer;
+document.querySelectorAll('[data-toast]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var t = document.getElementById('toast'); t.textContent = '[ SYSTEM ] ' + btn.dataset.toast; t.style.display = 'block';
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.style.display = 'none'; }, 1800);
+  });
+});
+[1, 2, 3, 4].forEach(function (l) {
+  var b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.textContent = l; b.dataset.l = l;
+  b.onclick = function () { setTownHall(l); }; document.getElementById('thsel').appendChild(b);
+});
+
+/* ============================ Start ============================ */
+addEventListener('resize', function () { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+var clock = new THREE.Clock();
+loadKits(function () {
+  buildWorld();
+  var q = /th=(\d)/.exec(location.search); setTownHall(q ? Number(q[1]) : 4);
+  var zq = /zoom=([\d.]+)/.exec(location.search); if (zq) zoomBy(Number(zq[1]));   // e.g. ?th=2&zoom=0.4 for close-ups
+  document.getElementById('loading').style.display = 'none';
+  (function loop() {
+    var t = clock.getElapsedTime();
+    controls.update();
+    scene.traverse(function (o) { if (o.userData.bob !== undefined) { o.position.y = o.userData.bob + Math.sin(t * 2 + o.id) * 0.06; o.rotation.y = t; } });
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  })();
+});
+</script>
+</body>
+</html>

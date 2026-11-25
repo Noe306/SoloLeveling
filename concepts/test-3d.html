@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Village Test: Real 3D</title>
+<style>
+  /* Test page: Clash-of-Clans-style village in real 3D (Three.js loaded from a CDN for this test only).
+     HUD uses the app's "System" palette. */
+  :root { --panel: rgba(6,16,38,.88); --line: #1d5aa8; --line-hi: #4aa3ff; --text: #d6e8ff; --muted: #7f9bc4; --cyan: #6be6ff; --gold: #f5b942; --glow: rgba(74,163,255,.45); }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #244a26; font-family: "Bahnschrift", "Segoe UI", system-ui, sans-serif; color: var(--text);
+               user-select: none; -webkit-user-select: none; }
+  canvas { display: block; touch-action: none; }
+  .win { position: fixed; background: var(--panel); border: 1px solid var(--line-hi); box-shadow: 0 0 16px var(--glow); backdrop-filter: blur(3px); }
+  /* Top-left: profile */
+  .profile { top: 12px; left: 12px; display: flex; align-items: center; gap: .7rem; padding: .5rem .8rem .5rem .5rem; }
+  .lvl { width: 46px; height: 46px; display: grid; place-content: center; font: 800 1.2rem Consolas, monospace; color: #fff;
+         background: rgba(30,90,200,.5); border: 1px solid var(--cyan); clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); text-shadow: 0 0 8px var(--cyan); }
+  .pname { font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  .psub { font-size: .7rem; letter-spacing: .14em; color: #9b7bff; text-transform: uppercase; }
+  .xp { height: 5px; width: 130px; background: rgba(0,0,0,.5); border: 1px solid var(--line); margin-top: .3rem; }
+  .xp i { display: block; height: 100%; width: 62%; background: linear-gradient(90deg, #1b56c8, var(--cyan)); box-shadow: 0 0 8px var(--glow); }
+  /* Top-right: resources */
+  .res { top: 12px; right: 12px; padding: .45rem .7rem; display: grid; gap: .35rem; min-width: 190px; }
+  .res div { display: flex; justify-content: space-between; align-items: center; gap: 1rem; font: 700 .95rem Consolas, monospace; }
+  .res small { font: 700 .68rem "Bahnschrift", sans-serif; letter-spacing: .16em; color: var(--muted); }
+  .res .g { color: var(--gold); } .res .e { color: var(--cyan); }
+  /* Buttons */
+  .btn { position: fixed; background: linear-gradient(180deg, rgba(60,130,255,.6), rgba(30,80,200,.6)); color: #fff; border: 1px solid var(--line-hi);
+         font: 800 .95rem "Bahnschrift", sans-serif; letter-spacing: .16em; text-transform: uppercase; cursor: pointer; box-shadow: 0 0 16px var(--glow); text-shadow: 0 0 8px var(--cyan); }
+  .btn:hover { border-color: var(--cyan); box-shadow: 0 0 22px var(--glow); }
+  .build { right: 12px; bottom: 12px; width: 120px; height: 64px; font-size: 1.05rem; }
+  .shop { right: 12px; bottom: 86px; width: 120px; height: 44px; }
+  .quests { left: 12px; bottom: 12px; width: 120px; height: 64px; background: rgba(6,16,38,.88); }
+  .zoom { position: fixed; right: 144px; bottom: 12px; display: grid; gap: 6px; }
+  .zoom .btn { position: static; width: 40px; height: 40px; font-size: 1.3rem; letter-spacing: 0; }
+  /* Selected building panel */
+  .info { left: 50%; bottom: 12px; transform: translateX(-50%); padding: .6rem .9rem; display: none; text-align: center; min-width: 260px; max-width: 92vw; }
+  .info h3 { margin: 0 0 .15rem; font-size: .95rem; letter-spacing: .16em; text-transform: uppercase; color: var(--cyan); text-shadow: 0 0 10px var(--glow); }
+  .info p { margin: .2rem 0 .5rem; font-size: .8rem; color: var(--text); }
+  .info .btn { position: static; padding: .45rem .9rem; font-size: .75rem; margin: 0 .2rem; }
+  .toast { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); padding: .5rem .9rem; font: .8rem Consolas, monospace; display: none; }
+  .err { position: fixed; inset: 0; display: grid; place-content: center; color: #ff8da3; font-size: 1rem; }
+  @media (max-width: 600px) { .res { min-width: 150px; } .xp { width: 90px; } .info { bottom: 90px; } .zoom { right: 140px; } }
+</style>
+</head>
+<body>
+<div class="win profile"><div class="lvl">6</div><div><div class="pname">Hunter</div><div class="psub">Rank D · Apprentice Mage</div><div class="xp"><i></i></div></div></div>
+<div class="win res">
+  <div><small>GOLD</small><span class="g">545 G</span></div>
+  <div><small>ELEMENTS</small><span class="e">5 / 16</span></div>
+</div>
+<button class="btn quests" type="button" onclick="location.href='../index.html'">◂ Quests</button>
+<div class="zoom"><button class="btn" id="zin" type="button" aria-label="Zoom in">+</button><button class="btn" id="zout" type="button" aria-label="Zoom out">−</button></div>
+<button class="btn shop" type="button" data-toast="Shop: concept only">Shop</button>
+<button class="btn build" type="button" data-toast="Build menu: concept only">Build</button>
+<div class="win info" id="info"><h3 id="infoName"></h3><p id="infoText"></p>
+  <button class="btn" type="button" data-toast="Info: concept only">Info</button><button class="btn" type="button" data-toast="Upgrade: concept only">Upgrade</button></div>
+<div class="win toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+if (!window.THREE || !THREE.OrbitControls) {
+  document.body.insertAdjacentHTML('beforeend', '<div class="err">Could not load Three.js (this test needs an internet connection).</div>');
+  throw new Error('THREE missing');
+}
+
+/* ============================ Setup ============================ */
+var GRID = 20, HALF = GRID / 2;
+var renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+
+var scene = new THREE.Scene();
+scene.background = new THREE.Color('#244a26');
+scene.fog = new THREE.Fog('#244a26', 55, 95);
+
+/* Camera: FIXED Clash-of-Clans-style angle (looking down the grid diagonal, so the base is a diamond).
+   Only zoom (wheel / pinch / buttons) and pan (drag empty ground) are allowed. */
+var camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.5, 300);
+var VIEW_DIR = new THREE.Vector3(1, 1.35, 1).normalize();
+camera.position.copy(VIEW_DIR).multiplyScalar(56);
+var controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableRotate = false;
+controls.screenSpacePanning = false;                  // pan along the ground, like Clash of Clans
+controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+controls.minDistance = 16; controls.maxDistance = 70;
+controls.enableDamping = true; controls.dampingFactor = 0.12;
+var PAN_LIMIT = 16;
+controls.addEventListener('change', function () {        // keep the camera over the village
+  var t = controls.target, x = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, t.x)), z = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, t.z));
+  var dx = x - t.x, dz = z - t.z;
+  if (dx || dz) { t.x += dx; t.z += dz; camera.position.x += dx; camera.position.z += dz; }
+});
+function zoomBy(f) {
+  var off = camera.position.clone().sub(controls.target);
+  var d = Math.max(controls.minDistance, Math.min(controls.maxDistance, off.length() * f));
+  camera.position.copy(controls.target).add(off.setLength(d));
+}
+document.getElementById('zin').onclick = function () { zoomBy(0.8); };
+document.getElementById('zout').onclick = function () { zoomBy(1.25); };
+
+scene.add(new THREE.HemisphereLight('#e6f4ff', '#3a5a2a', 0.62));
+var sun = new THREE.DirectionalLight('#fff1d6', 0.95);
+sun.position.set(-14, 26, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 80 });
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+
+/* ============================ Helpers ============================ */
+var MATS = {};
+function mat(c, opts) {
+  var key = c + JSON.stringify(opts || {});
+  if (!MATS[key]) MATS[key] = new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.8 }, opts || {}));
+  return MATS[key];
+}
+function glowMat(c, i) { return mat(c, { emissive: c, emissiveIntensity: i || 0.8, roughness: 0.4 }); }
+function part(geo, material, x, y, z, parent, noShadow) {
+  var m = new THREE.Mesh(geo, material); m.position.set(x, y, z);
+  if (!noShadow) { m.castShadow = true; m.receiveShadow = true; }
+  parent.add(m); return m;
+}
+var rng = (function (s) { return function () { s |= 0; s = s + 0x6D2B79F5 | 0; var t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; })(7);
+
+/* ============================ Surroundings ============================ */
+// Meadow around the base
+var meadow = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), mat('#3a6b2e', { roughness: 1 }));
+meadow.rotation.x = -Math.PI / 2; meadow.position.y = -0.02; meadow.receiveShadow = true; scene.add(meadow);
+// Checkered grass base (the buildable diamond)
+var tileGeo = new THREE.BoxGeometry(1, 0.12, 1);
+for (var i = 0; i < GRID; i++) for (var j = 0; j < GRID; j++) {
+  var tile = new THREE.Mesh(tileGeo, mat((i + j) % 2 ? '#64a443' : '#6cad49', { roughness: 1 }));
+  tile.position.set(i - HALF + 0.5, -0.04, j - HALF + 0.5); tile.receiveShadow = true; scene.add(tile);
+}
+// River with sandy banks along the back-left side
+function strip(x, z, w, d, rot, m, y) { var s = new THREE.Mesh(new THREE.PlaneGeometry(w, d), m); s.rotation.x = -Math.PI / 2; s.rotation.z = rot; s.position.set(x, y, z); s.receiveShadow = true; scene.add(s); }
+strip(-HALF - 9, 0, 9, 120, 0.25, mat('#d8c48a', { roughness: 1 }), 0.005);
+strip(-HALF - 9, 0, 6, 120, 0.25, mat('#2f86c4', { roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.92 }), 0.01);
+// Forest ring + rocks (low-poly), kept out of the base and the river
+var pineGeo = new THREE.ConeGeometry(0.9, 2.4, 7), crownGeo = new THREE.IcosahedronGeometry(1.1, 0), trunkGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.8, 6);
+var rockGeo = new THREE.DodecahedronGeometry(0.8, 0);
+function inRiver(x, z) { var cx = -HALF - 9 + Math.tan(0.25) * -z; return Math.abs(x - cx) < 5.5; }
+for (var k = 0; k < 420; k++) {
+  var x = (rng() - 0.5) * 100, z = (rng() - 0.5) * 100;
+  if (Math.abs(x) < HALF + 2.5 && Math.abs(z) < HALF + 2.5) continue;
+  if (inRiver(x, z)) continue;
+  if (x > 4 && z > 4 && x + z < 40) continue;          // keep the camera-side corner open so trees never hide the base
+  var g = new THREE.Group(), s = 0.7 + rng() * 0.6;
+  part(trunkGeo, mat('#6b4423'), 0, 0.4, 0, g, true);
+  if (rng() < 0.55) part(pineGeo, mat(rng() < 0.5 ? '#2c6e34' : '#245c2c', { flatShading: true }), 0, 1.8, 0, g, true);
+  else part(crownGeo, mat(rng() < 0.5 ? '#3a8f3e' : '#469e45', { flatShading: true }), 0, 1.5, 0, g, true);
+  g.scale.setScalar(s); g.position.set(x, 0, z); g.rotation.y = rng() * 6;
+  var near = Math.abs(x) < HALF + 8 && Math.abs(z) < HALF + 8;
+  g.traverse(function (o) { if (o.isMesh) o.castShadow = near; });
+  scene.add(g);
+}
+for (var r = 0; r < 40; r++) {
+  var rx = (rng() - 0.5) * 70, rz = (rng() - 0.5) * 70;
+  if (Math.abs(rx) < HALF + 1.5 && Math.abs(rz) < HALF + 1.5) continue;
+  var rock = part(rockGeo, mat('#8c8f8a', { flatShading: true }), rx, 0.2, rz, scene);
+  rock.scale.set(0.6 + rng(), 0.4 + rng() * 0.5, 0.6 + rng()); rock.rotation.y = rng() * 6;
+}
+
+/* ============================ Building models ============================ */
+// Element habitat: shared platform + an element-specific feature + an egg.
+function habitat(color, feature) {
+  return function (g) {
+    part(new THREE.CylinderGeometry(1.35, 1.45, 0.35, 10), mat('#4b4f5c'), 0, 0.18, 0, g);
+    part(new THREE.CylinderGeometry(1.2, 1.2, 0.08, 24), mat(color, { roughness: 0.5 }), 0, 0.39, 0, g);
+    part(new THREE.TorusGeometry(1.3, 0.06, 6, 24), glowMat(color, 0.6), 0, 0.36, 0, g).rotation.x = Math.PI / 2;
+    feature(g);
+    var egg = part(new THREE.SphereGeometry(0.32, 18, 14), mat(color, { roughness: 0.35 }), 0.35, 0.75, 0.35, g); egg.scale.y = 1.35;
+  };
+}
+var DESC = {
+  habitat: 'Home for dragons of this element. Upgrading adds new structures inside.',
+  townhall: 'Heart of the village. Its level follows your player level and unlocks buildings.',
+  lab: 'Researches dragon evolution (Egg → Hatchling → Juvenile → Adult).',
+  camp: 'Levels dragons up, one at a time, like the Clash of Clans Laboratory.',
+  hatchery: 'Breeding nest: produces a new egg when you want one.',
+  altar: 'Hero altar: home of one of up to 3 Hero dragons.',
+  wall: 'Wall segment.'
+};
+var MODELS = {
+  townhall: { size: 4, name: 'Town Hall', desc: DESC.townhall, build: function (g) {
+    part(new THREE.BoxGeometry(3.7, 0.5, 3.7), mat('#3b3f4c'), 0, 0.25, 0, g);
+    part(new THREE.BoxGeometry(3.8, 0.12, 3.8), mat('#d4a73a', { metalness: 0.4, roughness: 0.4 }), 0, 0.52, 0, g);
+    part(new THREE.BoxGeometry(2.8, 1.6, 2.8), mat('#2c3140'), 0, 1.35, 0, g);
+    part(new THREE.BoxGeometry(2.9, 0.14, 2.9), mat('#d4a73a', { metalness: 0.4, roughness: 0.4 }), 0, 2.2, 0, g);
+    var roof = part(new THREE.ConeGeometry(2.3, 1.6, 4), mat('#1f6f78'), 0, 3.05, 0, g); roof.rotation.y = Math.PI / 4;
+    part(new THREE.OctahedronGeometry(0.38, 0), glowMat('#6be6ff', 1.1), 0, 4.2, 0, g);
+    part(new THREE.BoxGeometry(0.8, 1.0, 0.1), mat('#d4a73a', { metalness: 0.4, roughness: 0.4 }), 0, 1.05, 1.42, g);
+    [[-1.45, -1.45], [1.45, -1.45], [-1.45, 1.45], [1.45, 1.45]].forEach(function (p) {
+      part(new THREE.CylinderGeometry(0.32, 0.38, 2.3, 8), mat('#3b3f4c'), p[0], 1.15, p[1], g);
+      part(new THREE.CylinderGeometry(0.4, 0.4, 0.12, 8), mat('#d4a73a', { metalness: 0.4, roughness: 0.4 }), p[0], 2.35, p[1], g);
+      part(new THREE.SphereGeometry(0.16, 10, 8), glowMat('#6be6ff', 0.9), p[0], 2.55, p[1], g);
+    });
+    var light = new THREE.PointLight('#6be6ff', 0.8, 6); light.position.set(0, 4.3, 0); g.add(light);
+  } },
+  fire: { size: 3, name: 'Fire Habitat', desc: DESC.habitat, build: habitat('#ff5a36', function (g) {
+    part(new THREE.CylinderGeometry(0.6, 0.6, 0.05, 20), glowMat('#ff6a1a', 1), -0.3, 0.45, -0.2, g);
+    part(new THREE.ConeGeometry(0.3, 1.3, 6), mat('#5a3a30', { flatShading: true }), -0.8, 0.95, -0.6, g);
+    part(new THREE.ConeGeometry(0.25, 0.9, 6), mat('#5a3a30', { flatShading: true }), 0.7, 0.8, -0.8, g);
+    var l = new THREE.PointLight('#ff6a1a', 0.9, 4); l.position.set(-0.3, 0.9, -0.2); g.add(l);
+  }) },
+  ice: { size: 3, name: 'Ice Habitat', desc: DESC.habitat, build: habitat('#8fe3ff', function (g) {
+    [[-0.7, -0.5, 1.4], [-0.3, -0.85, 1], [0.6, -0.7, 1.2], [-0.85, 0.3, 0.9]].forEach(function (c) {
+      var s = part(new THREE.ConeGeometry(0.22, c[2], 5), mat('#e6fbff', { roughness: 0.15, transparent: true, opacity: 0.9 }), c[0], 0.4 + c[2] / 2, c[1], g);
+      s.rotation.z = (c[0] > 0 ? -1 : 1) * 0.15;
+    });
+  }) },
+  forest: { size: 3, name: 'Forest Habitat', desc: DESC.habitat, build: habitat('#3fbf5a', function (g) {
+    part(new THREE.SphereGeometry(0.75, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat('#3a8f3e', { flatShading: true }), -0.45, 0.42, -0.4, g);
+    part(new THREE.CylinderGeometry(0.06, 0.08, 0.6, 6), mat('#6b4423'), 0.7, 0.7, -0.6, g);
+    part(new THREE.IcosahedronGeometry(0.42, 0), mat('#45b551', { flatShading: true }), 0.7, 1.15, -0.6, g);
+  }) },
+  storm: { size: 3, name: 'Storm Habitat', desc: DESC.habitat, build: habitat('#8a7dff', function (g) {
+    part(new THREE.CylinderGeometry(0.12, 0.2, 1.6, 6), mat('#3a3550'), -0.6, 1.2, -0.6, g);
+    [[-0.6, 2.15, -0.6, 0.45], [-0.25, 2.05, -0.55, 0.32], [-0.85, 2.0, -0.35, 0.3]].forEach(function (c) {
+      part(new THREE.SphereGeometry(c[3], 10, 8), mat('#5b5670', { flatShading: true }), c[0], c[1], c[2], g);
+    });
+    part(new THREE.OctahedronGeometry(0.16, 0), glowMat('#ffe14d', 1.2), -0.6, 1.75, -0.6, g);
+  }) },
+  cosmic: { size: 3, name: 'Cosmic Habitat', desc: DESC.habitat, build: habitat('#c04dff', function (g) {
+    part(new THREE.SphereGeometry(0.3, 16, 12), glowMat('#e6a0ff', 1), -0.45, 1.5, -0.45, g);
+    var ring = part(new THREE.TorusGeometry(0.55, 0.04, 6, 32), glowMat('#c04dff', 0.9), -0.45, 1.5, -0.45, g); ring.rotation.x = 1.2;
+    part(new THREE.CylinderGeometry(0.08, 0.12, 1.1, 6), mat('#2c2240'), -0.45, 0.95, -0.45, g);
+  }) },
+  lab: { size: 2, name: 'Research Lab', desc: DESC.lab, build: function (g) {
+    part(new THREE.BoxGeometry(1.7, 0.9, 1.7), mat('#3b3f4c'), 0, 0.45, 0, g);
+    part(new THREE.BoxGeometry(1.75, 0.1, 1.75), mat('#d4a73a', { metalness: 0.4, roughness: 0.4 }), 0, 0.92, 0, g);
+    part(new THREE.SphereGeometry(0.72, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat('#9b7bff', { emissive: '#5a3bd8', emissiveIntensity: 0.55, roughness: 0.2, transparent: true, opacity: 0.9 }), 0, 0.95, 0, g);
+  } },
+  camp: { size: 3, name: 'Training Camp', desc: DESC.camp, build: function (g) {
+    part(new THREE.BoxGeometry(2.8, 0.06, 2.8), mat('#b89a6a', { roughness: 1 }), 0, 0.03, 0, g);
+    [[0, -1.35, 2.8, 0.12], [0, 1.35, 2.8, 0.12], [-1.35, 0, 0.12, 2.8], [1.35, 0, 0.12, 2.8]].forEach(function (f) {
+      part(new THREE.BoxGeometry(f[2], 0.35, f[3]), mat('#7a5230'), f[0], 0.2, f[1], g);
+    });
+    var tent = part(new THREE.ConeGeometry(0.85, 1.4, 4), mat('#1d5aa8'), -0.45, 0.75, -0.45, g); tent.rotation.y = Math.PI / 4;
+    part(new THREE.CylinderGeometry(0.05, 0.05, 1.1, 6), mat('#5a3b22'), 0.75, 0.55, 0.7, g);
+    var t1 = part(new THREE.CylinderGeometry(0.3, 0.3, 0.06, 20), mat('#ffffff'), 0.75, 1.1, 0.7, g); t1.rotation.x = Math.PI / 2;
+    var t2 = part(new THREE.CylinderGeometry(0.16, 0.16, 0.07, 20), mat('#d33'), 0.75, 1.1, 0.71, g); t2.rotation.x = Math.PI / 2;
+  } },
+  hatchery: { size: 2, name: 'Hatchery', desc: DESC.hatchery, build: function (g) {
+    var nest = part(new THREE.TorusGeometry(0.62, 0.22, 8, 18), mat('#8a6a3a', { flatShading: true }), 0, 0.22, 0, g); nest.rotation.x = Math.PI / 2;
+    part(new THREE.CylinderGeometry(0.6, 0.6, 0.1, 18), mat('#a8864e'), 0, 0.1, 0, g);
+    [['#ff5a36', -0.2, -0.1], ['#8fe3ff', 0.2, -0.05], ['#3fbf5a', 0, 0.22]].forEach(function (e) {
+      var egg = part(new THREE.SphereGeometry(0.2, 14, 10), mat(e[0], { roughness: 0.35 }), e[1], 0.38, e[2], g); egg.scale.y = 1.3;
+    });
+  } },
+  altar: { size: 1, name: 'Hero Altar', desc: DESC.altar, build: function (g) {
+    part(new THREE.CylinderGeometry(0.38, 0.45, 0.35, 8), mat('#3b3f4c'), 0, 0.18, 0, g);
+    part(new THREE.CylinderGeometry(0.4, 0.4, 0.06, 8), mat('#d4a73a', { metalness: 0.4, roughness: 0.4 }), 0, 0.38, 0, g);
+    part(new THREE.OctahedronGeometry(0.2, 0), glowMat('#f5b942', 1), 0, 0.7, 0, g);
+  } },
+  tree: { size: 1, name: 'Tree', desc: 'Decoration.', build: function (g) {
+    part(trunkGeo, mat('#6b4423'), 0, 0.4, 0, g);
+    part(crownGeo, mat('#3a8f3e', { flatShading: true }), 0, 1.35, 0, g).scale.setScalar(0.6);
+  } },
+  wall: { size: 1, name: 'Wall', desc: DESC.wall, build: function () {} }   // geometry built by rebuildWalls()
+};
+
+/* ============================ Layout ============================ */
+var buildings = [
+  { type: 'townhall', x: 8, y: 8 },
+  { type: 'altar', x: 7, y: 7 }, { type: 'altar', x: 12, y: 7 }, { type: 'altar', x: 7, y: 12 },
+  { type: 'fire', x: 2, y: 2 }, { type: 'ice', x: 15, y: 2 }, { type: 'cosmic', x: 8, y: 1 },
+  { type: 'forest', x: 2, y: 15 }, { type: 'storm', x: 15, y: 15 },
+  { type: 'lab', x: 2, y: 9 }, { type: 'camp', x: 15, y: 8 }, { type: 'hatchery', x: 9, y: 16 },
+  { type: 'tree', x: 0, y: 0 }, { type: 'tree', x: 19, y: 19 }, { type: 'tree', x: 0, y: 19 }, { type: 'tree', x: 19, y: 0 }
+];
+// Wall ring around the Town Hall core, with an opening at the front.
+for (var w = 6; w <= 13; w++) {
+  [[w, 6], [w, 13], [6, w], [13, w]].forEach(function (p) {
+    if (p[1] === 13 && (p[0] === 9 || p[0] === 10)) return;   // gate
+    if (!buildings.some(function (b) { return b.type === 'wall' && b.x === p[0] && b.y === p[1]; })) buildings.push({ type: 'wall', x: p[0], y: p[1] });
+  });
+}
+
+function worldPos(b, x, y) { var s = MODELS[b.type].size; return new THREE.Vector3(x - HALF + s / 2, 0, y - HALF + s / 2); }
+buildings.forEach(function (b) {
+  b.group = new THREE.Group(); MODELS[b.type].build(b.group);
+  b.group.userData.building = b;
+  b.group.position.copy(worldPos(b, b.x, b.y));
+  scene.add(b.group);
+});
+
+// Walls: a post on each tile, plus connectors toward neighbouring walls (CoC-style).
+var postGeo = new THREE.BoxGeometry(0.5, 0.7, 0.5), capGeo = new THREE.BoxGeometry(0.56, 0.1, 0.56), linkGeo = new THREE.BoxGeometry(0.5, 0.5, 0.36);
+function rebuildWalls() {
+  var at = {};
+  buildings.forEach(function (b) { if (b.type === 'wall') at[b.x + ',' + b.y] = true; });
+  buildings.forEach(function (b) {
+    if (b.type !== 'wall') return;
+    while (b.group.children.length) b.group.remove(b.group.children[0]);
+    part(postGeo, mat('#2c3140'), 0, 0.35, 0, b.group);
+    part(capGeo, mat('#d4a73a', { metalness: 0.4, roughness: 0.4 }), 0, 0.73, 0, b.group);
+    if (at[(b.x + 1) + ',' + b.y]) part(linkGeo, mat('#3b4256'), 0.5, 0.25, 0, b.group);
+    if (at[b.x + ',' + (b.y + 1)]) { var l = part(linkGeo, mat('#3b4256'), 0, 0.25, 0.5, b.group); l.rotation.y = Math.PI / 2; }
+  });
+}
+rebuildWalls();
+
+/* ============================ Select & drag ============================ */
+var ray = new THREE.Raycaster(), mouse = new THREE.Vector2(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+var pending = null, drag = null, selected = null;
+var footprint = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: '#f5b942', transparent: true, opacity: 0.45, depthWrite: false }));
+footprint.rotation.x = -Math.PI / 2; footprint.position.y = 0.04; footprint.visible = false; scene.add(footprint);
+
+function setMouse(e) { mouse.x = e.clientX / innerWidth * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1; ray.setFromCamera(mouse, camera); }
+function groundHit() { var p = new THREE.Vector3(); return ray.ray.intersectPlane(groundPlane, p) ? p : null; }
+function buildingAt(e) {
+  setMouse(e);
+  var hits = ray.intersectObjects(buildings.map(function (b) { return b.group; }), true);
+  if (!hits.length) return null;
+  var o = hits[0].object; while (o && !o.userData.building) o = o.parent;
+  return o ? o.userData.building : null;
+}
+function overlaps(b, x, y) {
+  var s = MODELS[b.type].size;
+  if (x < 0 || y < 0 || x + s > GRID || y + s > GRID) return true;
+  return buildings.some(function (o) { if (o === b) return false; var t = MODELS[o.type].size; return x < o.x + t && x + s > o.x && y < o.y + t && y + s > o.y; });
+}
+function showFootprint(b, x, y, color) {
+  var s = MODELS[b.type].size, p = worldPos(b, x, y);
+  footprint.scale.set(s, s, 1); footprint.position.set(p.x, 0.04, p.z);
+  footprint.material.color.set(color); footprint.visible = true;
+}
+function select(b) {
+  selected = b;
+  var info = document.getElementById('info');
+  if (!b) { info.style.display = 'none'; footprint.visible = false; return; }
+  document.getElementById('infoName').textContent = MODELS[b.type].name + (b.type === 'wall' || b.type === 'tree' ? '' : ' · Level 1');
+  document.getElementById('infoText').textContent = MODELS[b.type].desc;
+  info.style.display = 'block';
+  showFootprint(b, b.x, b.y, '#f5b942');
+}
+
+// Capture phase on window runs BEFORE OrbitControls, so grabbing a building never pans the camera.
+addEventListener('pointerdown', function (e) {
+  if (e.target !== renderer.domElement || !e.isPrimary || e.button > 0) return;
+  var b = buildingAt(e);
+  if (!b) { pending = { empty: true, x: e.clientX, y: e.clientY }; return; }   // let the camera pan
+  e.stopPropagation();
+  var p = groundHit();
+  pending = { b: b, x: e.clientX, y: e.clientY, offX: p.x - b.group.position.x, offZ: p.z - b.group.position.z };
+}, true);
+addEventListener('pointermove', function (e) {
+  if (!pending || pending.empty) return;
+  if (!drag && Math.hypot(e.clientX - pending.x, e.clientY - pending.y) > 6) {
+    drag = { b: pending.b, x: pending.b.x, y: pending.b.y, ok: true }; select(drag.b);
+  }
+  if (!drag) return;
+  setMouse(e);
+  var p = groundHit(); if (!p) return;
+  var s = MODELS[drag.b.type].size;
+  drag.x = Math.round(p.x - pending.offX + HALF - s / 2); drag.y = Math.round(p.z - pending.offZ + HALF - s / 2);
+  drag.ok = !overlaps(drag.b, drag.x, drag.y);
+  var wp = worldPos(drag.b, drag.x, drag.y); drag.b.group.position.set(wp.x, 0.3, wp.z);   // lifted while dragging
+  showFootprint(drag.b, drag.x, drag.y, drag.ok ? '#50ff8c' : '#ff4660');
+});
+addEventListener('pointerup', function (e) {
+  if (!pending) return;
+  var moved = Math.hypot(e.clientX - pending.x, e.clientY - pending.y) > 6;
+  if (drag) {
+    if (drag.ok) { drag.b.x = drag.x; drag.b.y = drag.y; }
+    drag.b.group.position.copy(worldPos(drag.b, drag.b.x, drag.b.y));
+    if (drag.b.type === 'wall') rebuildWalls();
+    select(drag.b); drag = null;
+  } else if (!moved) {
+    select(pending.empty ? null : pending.b);
+  }
+  pending = null;
+});
+
+/* ============================ HUD toasts ============================ */
+var toastTimer;
+document.querySelectorAll('[data-toast]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var t = document.getElementById('toast'); t.textContent = '[ SYSTEM ] ' + btn.dataset.toast; t.style.display = 'block';
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.style.display = 'none'; }, 1800);
+  });
+});
+
+/* ============================ Loop ============================ */
+addEventListener('resize', function () { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+var clock = new THREE.Clock();
+(function loop() {
+  var t = clock.getElapsedTime();
+  controls.update();
+  // Gentle idle animation: glowing crystals bob.
+  buildings.forEach(function (b) { if (b.type === 'townhall' || b.type === 'altar') { var c = b.group.children.find(function (m) { return m.geometry && m.geometry.type === 'OctahedronGeometry'; }); if (c) c.position.y = (b.type === 'altar' ? 0.7 : 4.2) + Math.sin(t * 2 + b.x) * 0.08; } });
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

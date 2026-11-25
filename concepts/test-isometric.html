@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Village Test: Isometric 2.5D</title>
+<style>
+  /* Test page: Clash-of-Clans-style isometric village drawn with Canvas 2D, no library. */
+  html, body { margin: 0; height: 100%; background: #0b1a10; overflow: hidden; font-family: "Bahnschrift", "Segoe UI", system-ui, sans-serif; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .hud { position: fixed; top: 12px; left: 12px; background: rgba(6,16,38,.88); color: #d6e8ff; border: 1px solid #4aa3ff;
+         padding: .55rem .8rem; font-size: .8rem; letter-spacing: .06em; box-shadow: 0 0 16px rgba(74,163,255,.35); max-width: 300px; }
+  .hud b { color: #6be6ff; letter-spacing: .14em; text-transform: uppercase; display: block; margin-bottom: .2rem; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud"><b>Option 1: Isometric 2.5D</b>Fixed camera, no library. Drag a building to move it (green = free, red = blocked).</div>
+<script>
+/* ======================= Isometric projection ======================= */
+var TILE_W = 64, TILE_H = 32, GRID = 14;
+var canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+var origin = { x: 0, y: 0 }, dpr = 1;
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr;
+  // Centre the diamond-shaped grid on screen.
+  origin.x = innerWidth / 2;
+  origin.y = innerHeight / 2 - (GRID * TILE_H) / 2;
+  draw();
+}
+// Grid (gx, gy) + height z  ->  screen point
+function iso(gx, gy, z) { return { x: origin.x + (gx - gy) * TILE_W / 2, y: origin.y + (gx + gy) * TILE_H / 2 - (z || 0) }; }
+// Screen point -> grid coordinates (on the ground)
+function toGrid(x, y) {
+  var a = (x - origin.x) / (TILE_W / 2), b = (y - origin.y) / (TILE_H / 2);
+  return { gx: (a + b) / 2, gy: (b - a) / 2 };
+}
+
+/* ======================= Drawing primitives ======================= */
+function poly(points, fill, stroke) {
+  ctx.beginPath();
+  points.forEach(function (p, i) { i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+  ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+}
+// Lighten / darken a hex colour: amt -1..1
+function shade(hex, amt) {
+  var n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  function f(c) { return Math.round(amt < 0 ? c * (1 + amt) : c + (255 - c) * amt); }
+  return 'rgb(' + f(r) + ',' + f(g) + ',' + f(b) + ')';
+}
+// A solid box on footprint (x, y, w, d) from height z0 to z0+h. Light comes from the top-left.
+function box(x, y, w, d, z0, h, color) {
+  var L = iso(x, y + d, z0), B = iso(x + w, y + d, z0), R = iso(x + w, y, z0);
+  var Lt = iso(x, y + d, z0 + h), Bt = iso(x + w, y + d, z0 + h), Rt = iso(x + w, y, z0 + h), Tt = iso(x, y, z0 + h);
+  poly([L, B, Bt, Lt], shade(color, -0.12), 'rgba(0,0,0,.25)');   // front-left face
+  poly([B, R, Rt, Bt], shade(color, -0.35), 'rgba(0,0,0,.25)');   // front-right face (shadow side)
+  poly([Tt, Rt, Bt, Lt], shade(color, 0.12), 'rgba(0,0,0,.2)');   // top face
+}
+// Pyramid roof over footprint, base at z0, apex height h.
+function pyramid(x, y, w, d, z0, h, color) {
+  var L = iso(x, y + d, z0), B = iso(x + w, y + d, z0), R = iso(x + w, y, z0), A = iso(x + w / 2, y + d / 2, z0 + h);
+  poly([L, B, A], shade(color, -0.05), 'rgba(0,0,0,.3)');
+  poly([B, R, A], shade(color, -0.3), 'rgba(0,0,0,.3)');
+}
+// Soft ground shadow under a footprint
+function groundShadow(x, y, w, d) {
+  poly([iso(x + .15, y + .35), iso(x + w + .35, y + .35), iso(x + w + .35, y + d + .15), iso(x + .15, y + d + .15)], 'rgba(0,0,0,.22)');
+}
+
+/* ======================= Buildings ======================= */
+// Each type draws itself at grid (x, y). size = footprint in tiles.
+var TYPES = {
+  townhall: { size: 4, name: 'Town Hall', draw: function (x, y) {
+    box(x + .2, y + .2, 3.6, 3.6, 0, 14, '#8d8f94');               // stone base
+    box(x + .6, y + .6, 2.8, 2.8, 14, 38, '#e8dcc0');               // walls
+    box(x + .6, y + 3.2, .5, .2, 14, 30, '#b9935a');                // corner beam
+    box(x + 1.6, y + 3.35, .8, .1, 14, 20, '#5a3b22');              // door
+    pyramid(x + .4, y + .4, 3.2, 3.2, 52, 42, '#c0392b');           // roof
+    box(x + 1.9, y + 1.9, .2, .2, 94, 26, '#5a3b22');               // flag pole
+    poly([iso(x + 2.1, y + 2, 120), iso(x + 2.1, y + 2, 108), iso(x + 2.9, y + 1.4, 114)], '#f5b942');
+  } },
+  fire: { size: 3, name: 'Fire Habitat', draw: function (x, y) {
+    box(x + .1, y + .1, 2.8, 2.8, 0, 10, '#4a3a33');                // rock base
+    box(x + .5, y + .5, 2, 2, 10, 6, '#3a2a24');
+    var c = iso(x + 1.5, y + 1.5, 16);                              // lava pool (glowing)
+    ctx.save(); ctx.shadowColor = '#ff7a1a'; ctx.shadowBlur = 18;
+    poly([iso(x + .8, y + 1.5, 16), iso(x + 1.5, y + 2.2, 16), iso(x + 2.2, y + 1.5, 16), iso(x + 1.5, y + .8, 16)], '#ff6a1a');
+    ctx.restore();
+    // Rocky spires
+    pyramid(x + .3, y + .3, .7, .7, 10, 34, '#6b4a3a'); pyramid(x + 2, y + .4, .6, .6, 10, 26, '#6b4a3a');
+    // Egg resting in the lava
+    ctx.fillStyle = '#ff4d2e'; ctx.beginPath(); ctx.ellipse(c.x, c.y - 12, 9, 13, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.ellipse(c.x - 3, c.y - 17, 2.5, 4, 0, 0, Math.PI * 2); ctx.fill();
+  } },
+  camp: { size: 3, name: 'Training Camp', draw: function (x, y) {
+    poly([iso(x + .1, y + .1), iso(x + 2.9, y + .1), iso(x + 2.9, y + 2.9), iso(x + .1, y + 2.9)], '#b89a6a');   // dirt yard
+    box(x + .1, y + .1, 2.8, .15, 0, 9, '#7a5230'); box(x + .1, y + .1, .15, 2.8, 0, 9, '#7a5230');             // back fences
+    pyramid(x + .5, y + .5, 1.4, 1.4, 0, 40, '#2e6fd0');                                                       // tent
+    box(x + 2.2, y + 2, .15, .15, 0, 28, '#5a3b22');                                                           // target post
+    var t = iso(x + 2.27, y + 2.07, 30); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(t.x, t.y, 8, 0, 7); ctx.fill();
+    ctx.fillStyle = '#d33'; ctx.beginPath(); ctx.arc(t.x, t.y, 5, 0, 7); ctx.fill();
+    box(x + .1, y + 2.75, 2.8, .15, 0, 9, '#8a6038'); box(x + 2.75, y + .1, .15, 2.8, 0, 9, '#8a6038');         // front fences
+  } },
+  lab: { size: 2, name: 'Research Lab', draw: function (x, y) {
+    box(x + .15, y + .15, 1.7, 1.7, 0, 22, '#5d6b8a');
+    var c = iso(x + 1, y + 1, 22);
+    ctx.save(); ctx.shadowColor = '#9b7bff'; ctx.shadowBlur = 16;
+    var g = ctx.createRadialGradient(c.x - 6, c.y - 18, 2, c.x, c.y - 8, 30); g.addColorStop(0, '#e6dcff'); g.addColorStop(1, '#6a4bd8');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c.x, c.y, 26, 13, 0, Math.PI, 0); ctx.ellipse(c.x, c.y, 26, 26, 0, 0, Math.PI, true); ctx.fill();
+    ctx.restore();
+  } },
+  tree: { size: 1, name: 'Tree', draw: function (x, y) {
+    box(x + .42, y + .42, .16, .16, 0, 16, '#6b4423');
+    var c = iso(x + .5, y + .5, 30);
+    [[0, 0, 15, '#2f8f3a'], [-6, 5, 11, '#277a31'], [6, 4, 11, '#3aa346'], [0, -8, 10, '#45b551']].forEach(function (k) {
+      ctx.fillStyle = k[3]; ctx.beginPath(); ctx.arc(c.x + k[0], c.y + k[1], k[2], 0, 7); ctx.fill();
+    });
+  } }
+};
+
+var buildings = [
+  { type: 'townhall', x: 5, y: 5 },
+  { type: 'fire', x: 1, y: 6 },
+  { type: 'camp', x: 6, y: 10 },
+  { type: 'lab', x: 10, y: 4 },
+  { type: 'tree', x: 1, y: 1 }, { type: 'tree', x: 2, y: 2 }, { type: 'tree', x: 12, y: 11 },
+  { type: 'tree', x: 11, y: 12 }, { type: 'tree', x: 0, y: 12 }, { type: 'tree', x: 12, y: 0 }
+];
+
+/* ======================= Scene ======================= */
+var drag = null;   // { b, offX, offY, x, y, ok }
+
+function overlaps(b, x, y) {
+  var s = TYPES[b.type].size;
+  if (x < 0 || y < 0 || x + s > GRID || y + s > GRID) return true;
+  return buildings.some(function (o) {
+    if (o === b) return false;
+    var t = TYPES[o.type].size;
+    return x < o.x + t && x + s > o.x && y < o.y + t && y + s > o.y;
+  });
+}
+
+function draw() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // Sky-to-ground backdrop
+  var bg = ctx.createLinearGradient(0, 0, 0, innerHeight); bg.addColorStop(0, '#1d3b24'); bg.addColorStop(1, '#0b1a10');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  // Island edge (cliff) under the grid
+  var T = iso(0, 0), Rr = iso(GRID, 0), Bb = iso(GRID, GRID), Ll = iso(0, GRID);
+  poly([Ll, Bb, { x: Bb.x, y: Bb.y + 26 }, { x: Ll.x, y: Ll.y + 26 }], '#5b4330');
+  poly([Bb, Rr, { x: Rr.x, y: Rr.y + 26 }, { x: Bb.x, y: Bb.y + 26 }], '#47331f');
+  // Checkered grass tiles
+  for (var gx = 0; gx < GRID; gx++) for (var gy = 0; gy < GRID; gy++) {
+    poly([iso(gx, gy), iso(gx + 1, gy), iso(gx + 1, gy + 1), iso(gx, gy + 1)], (gx + gy) % 2 ? '#5fae45' : '#67b84c');
+  }
+  // Drag footprint preview
+  if (drag) {
+    var s = TYPES[drag.b.type].size;
+    poly([iso(drag.x, drag.y), iso(drag.x + s, drag.y), iso(drag.x + s, drag.y + s), iso(drag.x, drag.y + s)],
+         drag.ok ? 'rgba(80,255,140,.45)' : 'rgba(255,70,90,.45)', drag.ok ? '#50ff8c' : '#ff4660');
+  }
+  // Painter's algorithm: draw back-to-front by the building's front corner.
+  buildings.slice().sort(function (a, b) {
+    var pa = drag && drag.b === a ? drag : a, pb = drag && drag.b === b ? drag : b;
+    return (pa.x + pa.y + TYPES[a.type].size * 2) - (pb.x + pb.y + TYPES[b.type].size * 2);
+  }).forEach(function (b) {
+    var p = drag && drag.b === b ? drag : b, t = TYPES[b.type];
+    groundShadow(p.x, p.y, t.size, t.size);
+    t.draw(p.x, p.y);
+    if (b.type !== 'tree') {
+      var lp = iso(p.x + t.size / 2, p.y + t.size / 2, 0);
+      ctx.font = '700 11px Bahnschrift, Segoe UI, sans-serif'; ctx.textAlign = 'center';
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(t.name.toUpperCase(), lp.x, lp.y + t.size * 9 + 14);
+      ctx.fillStyle = '#fff'; ctx.fillText(t.name.toUpperCase(), lp.x, lp.y + t.size * 9 + 14);
+    }
+  });
+}
+
+/* ======================= Drag & drop ======================= */
+function pointerGrid(e) { var r = canvas.getBoundingClientRect(); return toGrid(e.clientX - r.left, e.clientY - r.top); }
+canvas.addEventListener('pointerdown', function (e) {
+  var g = pointerGrid(e);
+  // Pick the front-most building whose footprint contains the tile.
+  var hit = buildings.filter(function (b) { var s = TYPES[b.type].size; return g.gx >= b.x && g.gx < b.x + s && g.gy >= b.y && g.gy < b.y + s; })
+                     .sort(function (a, b) { return (b.x + b.y) - (a.x + a.y); })[0];
+  if (!hit) return;
+  drag = { b: hit, offX: g.gx - hit.x, offY: g.gy - hit.y, x: hit.x, y: hit.y, ok: true };
+  canvas.setPointerCapture(e.pointerId);
+  draw();
+});
+canvas.addEventListener('pointermove', function (e) {
+  if (!drag) return;
+  var g = pointerGrid(e);
+  drag.x = Math.round(g.gx - drag.offX); drag.y = Math.round(g.gy - drag.offY);
+  drag.ok = !overlaps(drag.b, drag.x, drag.y);
+  draw();
+});
+canvas.addEventListener('pointerup', function () {
+  if (!drag) return;
+  if (drag.ok) { drag.b.x = drag.x; drag.b.y = drag.y; }
+  drag = null; draw();
+});
+
+addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
