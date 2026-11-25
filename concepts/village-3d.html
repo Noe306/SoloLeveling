@@ -74,18 +74,25 @@ renderer.outputEncoding = THREE.sRGBEncoding;
 document.body.prepend(renderer.domElement);
 
 var scene = new THREE.Scene();
-scene.background = col('#2b5427');
-scene.fog = new THREE.Fog(col('#2b5427'), 60, 100);
+// Sky: vertical gradient painted into a canvas (deep blue overhead → pale haze at the horizon).
+scene.background = (function () {
+  var c = document.createElement('canvas'); c.width = 4; c.height = 512;
+  var x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0, '#2a74c4'); g.addColorStop(0.4, '#6fb6ea'); g.addColorStop(0.75, '#bfe2fb'); g.addColorStop(1, '#e8f5ff');
+  x.fillStyle = g; x.fillRect(0, 0, 4, 512);
+  var tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding; return tex;
+})();
+scene.fog = new THREE.Fog(col('#cfe8fb'), 75, 175);        // far islands fade into the haze
 
 // Fixed Clash-of-Clans angle: zoom + pan only, never rotate.
 var camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.5, 300);
-camera.position.copy(new THREE.Vector3(1, 1.35, 1).normalize().multiplyScalar(54));
+camera.position.copy(new THREE.Vector3(1, 1.35, 1).normalize().multiplyScalar(66));   // start wide enough to see the island
 var controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableRotate = false;
 controls.screenSpacePanning = false;
 controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
-controls.minDistance = 14; controls.maxDistance = 70;
+controls.minDistance = 14; controls.maxDistance = 88;
 controls.enableDamping = true; controls.dampingFactor = 0.12;
 var PAN_LIMIT = 16;
 controls.addEventListener('change', function () {
@@ -100,8 +107,8 @@ function zoomBy(f) {
 document.getElementById('zin').onclick = function () { zoomBy(0.8); };
 document.getElementById('zout').onclick = function () { zoomBy(1.25); };
 
-scene.add(new THREE.HemisphereLight('#eaf6ff', '#4a6a35', 0.75));
-var sun = new THREE.DirectionalLight('#fff1d6', 1.0);
+scene.add(new THREE.HemisphereLight('#e2f2ff', '#8a9aa6', 0.8));   // sky above, pale cloud-light below
+var sun = new THREE.DirectionalLight('#fff1d6', 1.05);
 sun.position.set(-14, 26, 10); sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 80 });
@@ -257,17 +264,14 @@ var MODELS = {
     tint(kit('rock_tallA', -0.75, 0.1, -0.6, 0.4, 1.6, g), '#6b3a2a'); tint(kit('rock_tallB', 0.75, 0.1, -0.8, 2, 1.2, g), '#6b3a2a');
     var lava = glow(new THREE.CylinderGeometry(0.55, 0.55, 0.05, 24), '#ff6a1a', 1.1, -0.1, 0.17, 0.25, g);
     var l = new THREE.PointLight('#ff6a1a', 1, 4); l.position.set(-0.1, 0.8, 0.25); g.add(l);
-    egg('#ff4d2e', -0.1, 0.55, 0.25, g);
   }) },
   ice: { size: 3, name: 'Ice Habitat', desc: DESC.habitat, build: habitat('#8fe3ff', function (g) {
     tint(kit('rock_tallC', -0.7, 0.1, -0.7, 0.2, 1.5, g), '#d8f6ff'); tint(kit('rock_tallA', 0.8, 0.1, -0.55, 1.4, 1.1, g), '#bfeaff');
     tint(kit('stone_tallA', -0.85, 0.1, 0.6, 0.8, 1.2, g), '#e6fbff');
-    egg('#8fe3ff', 0.25, 0.55, 0.3, g);
   }) },
   forest: { size: 3, name: 'Forest Habitat', desc: DESC.habitat, build: habitat('#3fbf5a', function (g) {
     kit('tree_oak', -0.75, 0.1, -0.7, 0, 1.6, g); kit('plant_bushDetailed', 0.8, 0.1, -0.7, 0, 1.6, g);
     kit('mushroom_redGroup', -0.8, 0.1, 0.7, 0, 2, g); kit('flower_yellowA', 0.8, 0.1, 0.75, 0, 2, g); kit('flower_purpleA', 0.6, 0.1, 0.95, 0, 2, g);
-    egg('#3fbf5a', 0.15, 0.55, 0.15, g);
   }) },
   storm: { size: 3, name: 'Storm Habitat', desc: DESC.habitat, build: habitat('#8a7dff', function (g) {
     tint(kit('rock_tallB', -0.7, 0.1, -0.7, 0.6, 1.5, g), '#4b4766');
@@ -276,12 +280,10 @@ var MODELS = {
       cl.position.set(c[0], c[1], c[2]); cl.castShadow = true; g.add(cl);
     });
     glow(new THREE.OctahedronGeometry(0.15, 0), '#ffe14d', 1.4, -0.7, 1.75, -0.7, g);
-    egg('#8a7dff', 0.3, 0.55, 0.3, g);
   }) },
   cosmic: { size: 3, name: 'Cosmic Habitat', desc: DESC.habitat, build: habitat('#c04dff', function (g) {
     tint(kit('statue_ring', -0.6, 0.1, -0.6, Math.PI / 4, 1.8, g), '#6a4bd8'); tint(kit('statue_obelisk', 0.85, 0.1, -0.75, 0, 1.5, g), '#4a3680');
     glow(new THREE.SphereGeometry(0.2, 16, 12), '#e6a0ff', 1.2, -0.6, 0.95, -0.6, g);
-    egg('#c04dff', 0.25, 0.55, 0.35, g);
   }) },
   lab: { size: 2, name: 'Research Lab', desc: DESC.lab, build: function (g) {
     var h = hall(g, 0, 0, 1.3);
@@ -314,39 +316,268 @@ var MODELS = {
   wall: { size: 1, name: 'Wall', desc: 'Wall segment.', build: function () {} }
 };
 
+/* ============================ Sky-island scenery ============================
+   Inspired by the "floating islands above the clouds" mood board (own design, no copied art).
+   Everything below is procedural geometry + Kenney CC0 kit pieces. */
+var ANIMS = [];                                   // per-frame animations: fn(time, deltaTime)
+var MAIN_R = 19;                                  // main island radius (the 20x20 base fits inside)
+
+// Irregular floating island: flat grassy top + craggy rock underside tapering to a point.
+// Returns { mesh, outline(angle) -> rim radius }.
+function makeIsland(radius, depth, seg) {
+  seg = seg || 56;
+  var ph = [rng() * 6, rng() * 6, rng() * 6];
+  function outline(a) { return radius * (1 + 0.07 * Math.sin(3 * a + ph[0]) + 0.05 * Math.sin(5 * a + ph[1]) + 0.03 * Math.sin(9 * a + ph[2])); }
+  // Rings from the rim down to the tip: [height, radius factor, colour]
+  var RINGS = [[0, 1, '#5fa83f'], [-0.35, 1.03, '#4f8f35'], [-0.9, 0.99, '#8a6a45'], [-depth * 0.22, 0.88, '#9c9488'],
+               [-depth * 0.48, 0.64, '#857e74'], [-depth * 0.74, 0.36, '#6d675f'], [-depth, 0.05, '#57524c']];
+  var V = RINGS.map(function (rg, k) {
+    var row = [];
+    for (var i = 0; i < seg; i++) {
+      var a = i / seg * Math.PI * 2, rough = k >= 3 ? 0.86 + rng() * 0.28 : 1;
+      var r = outline(a) * rg[1] * rough, y = rg[0] + (k >= 3 && k < RINGS.length - 1 ? (rng() - 0.5) * depth * 0.09 : 0);
+      row.push(new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r));
+    }
+    return row;
+  });
+  var pos = [], cols = [];
+  function tri(a, b, c, color) {
+    pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    for (var n = 0; n < 3; n++) cols.push(color.r, color.g, color.b);
+  }
+  var top = col(RINGS[0][2]), centre = new THREE.Vector3(0, 0, 0);
+  for (var i = 0; i < seg; i++) tri(centre, V[0][(i + 1) % seg], V[0][i], top);              // grassy top
+  for (var k = 0; k < RINGS.length - 1; k++) {
+    for (var j = 0; j < seg; j++) {
+      var j2 = (j + 1) % seg, c = col(RINGS[k + 1][2]).multiplyScalar(0.85 + rng() * 0.3);       // faceted rock shading
+      tri(V[k][j], V[k][j2], V[k + 1][j], c); tri(V[k][j2], V[k + 1][j2], V[k + 1][j], c);
+    }
+  }
+  var geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  geo.computeVertexNormals();
+  var mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, side: THREE.DoubleSide }));
+  mesh.receiveShadow = true;
+  return { mesh: mesh, outline: outline, rings: V };
+}
+
+// Fluffy cloud: a cluster of soft white spheres.
+var cloudGeo = new THREE.SphereGeometry(1, 14, 10);
+var cloudMat = new THREE.MeshStandardMaterial({ color: col('#ffffff'), emissive: col('#dfeefa'), emissiveIntensity: 0.2, roughness: 1 });
+function cloud(x, y, z, s) {
+  var g = new THREE.Group();
+  for (var i = 0; i < 7; i++) {
+    var p = new THREE.Mesh(cloudGeo, cloudMat), r = 0.6 + rng() * 0.7;
+    p.position.set((rng() - 0.5) * 3.2, (rng() - 0.3) * 0.8, (rng() - 0.5) * 2); p.scale.setScalar(r); g.add(p);
+  }
+  g.position.set(x, y, z); g.scale.set(s, s * 0.6, s); scene.add(g); return g;
+}
+
+// Glowing crystal cluster (Solo Leveling touch on the islands).
+function crystals(x, y, z, color, n, size, parent) {
+  var g = new THREE.Group(); g.position.set(x, y, z); parent.add(g);
+  for (var i = 0; i < n; i++) {
+    var h = (0.6 + rng() * 0.9) * size;
+    var c = glow(new THREE.ConeGeometry(0.16 * size, h, 5), color, 0.9, (rng() - 0.5) * 0.8 * size, h / 2, (rng() - 0.5) * 0.8 * size, g);
+    c.rotation.z = (rng() - 0.5) * 0.6; c.rotation.x = (rng() - 0.5) * 0.6;
+  }
+  return g;
+}
+
+// Hanging chain made of alternating torus links, sagging between two points.
+function chain(a, b, sag) {
+  var linkGeo = new THREE.TorusGeometry(0.16, 0.045, 6, 12), linkMat = new THREE.MeshStandardMaterial({ color: col('#5a5f66'), metalness: 0.6, roughness: 0.45 });
+  var n = Math.ceil(a.distanceTo(b) / 0.26), prev = a.clone();
+  for (var i = 1; i <= n; i++) {
+    var t = i / n, p = a.clone().lerp(b, t); p.y -= Math.sin(t * Math.PI) * sag;
+    var link = new THREE.Mesh(linkGeo, linkMat);
+    link.position.copy(p); link.lookAt(prev); if (i % 2) link.rotateZ(Math.PI / 2);
+    scene.add(link); prev = p;
+  }
+}
+
+// Animated waterfall texture: soft vertical streaks scrolled every frame.
+function waterTexture() {
+  var c = document.createElement('canvas'); c.width = 64; c.height = 256;
+  var x = c.getContext('2d');
+  x.fillStyle = 'rgba(120,200,250,0.85)'; x.fillRect(0, 0, 64, 256);
+  for (var i = 0; i < 70; i++) {
+    x.fillStyle = 'rgba(255,255,255,' + (0.25 + Math.random() * 0.6) + ')';
+    x.fillRect(Math.random() * 64, Math.random() * 256, 1 + Math.random() * 3, 20 + Math.random() * 60);
+  }
+  var tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.encoding = THREE.sRGBEncoding;
+  return tex;
+}
+
+// Low-poly dragon that circles the island, flapping its wings.
+function flyingDragon(color, radius, height, speed, phase) {
+  var g = new THREE.Group(), body = new THREE.MeshStandardMaterial({ color: col(color), roughness: 0.6, flatShading: true });
+  var belly = new THREE.MeshStandardMaterial({ color: col('#e8d8b0'), roughness: 0.7, flatShading: true });
+  var torso = new THREE.Mesh(new THREE.SphereGeometry(0.8, 10, 8), body); torso.scale.set(1.8, 0.75, 0.75); g.add(torso);
+  var neck = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.4, 7), body); neck.rotation.z = -Math.PI / 2.6; neck.position.set(1.5, 0.45, 0); g.add(neck);
+  var head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 9, 7), body); head.scale.set(1.5, 0.9, 0.9); head.position.set(2.2, 0.85, 0); g.add(head);
+  [-0.18, 0.18].forEach(function (z) {
+    var horn = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.5, 5), belly); horn.position.set(2.0, 1.25, z); horn.rotation.z = 0.5; g.add(horn);
+    glow(new THREE.SphereGeometry(0.06, 6, 6), '#ffe14d', 1.5, 2.55, 0.98, z * 1.3, g);
+  });
+  var tail = new THREE.Mesh(new THREE.ConeGeometry(0.32, 2.8, 7), body); tail.rotation.z = Math.PI / 2; tail.position.set(-2.6, 0.1, 0); g.add(tail);
+  var wingShape = new THREE.BufferGeometry();
+  wingShape.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1.2, 0, 0.3, -0.4, 0, 3.4, 1.2, 0, 0.3, 1.0, 0, 2.6, -0.4, 0, 3.4, -0.4, 0, 3.4, -1.0, 0, 2.2, 0, 0, 0], 3));
+  wingShape.computeVertexNormals();
+  var wingMat = new THREE.MeshStandardMaterial({ color: col(color), roughness: 0.7, side: THREE.DoubleSide, flatShading: true });
+  var wings = [1, -1].map(function (side) {
+    var pivot = new THREE.Group(); pivot.position.set(0.2, 0.35, 0); g.add(pivot);
+    var w = new THREE.Mesh(wingShape, wingMat); w.scale.z = side; pivot.add(w);
+    return { pivot: pivot, side: side };
+  });
+  g.traverse(function (o) { if (o.isMesh) o.castShadow = true; });
+  scene.add(g);
+  ANIMS.push(function (t) {
+    var a = t * speed + phase;
+    g.position.set(Math.cos(a) * radius, height + Math.sin(t * 0.8 + phase) * 1.2, Math.sin(a) * radius);
+    g.rotation.y = -a - Math.PI / 2;                              // face along the flight path
+    g.rotation.z = Math.sin(t * 0.8 + phase) * 0.12;
+    wings.forEach(function (w) { w.pivot.rotation.x = w.side * Math.sin(t * 5 + phase) * 0.6; });
+  });
+}
+
+function buildSkyWorld() {
+  /* ---- Main island ---- */
+  var main = makeIsland(MAIN_R, 24, 72);
+  main.mesh.position.y = -0.1; scene.add(main.mesh);
+  var rimAt = function (a, inset) { var r = main.outline(a) - (inset || 0); return new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r); };
+
+  // Hanging roots / vines along the rim, stalactites and glowing crystals in the underside rock.
+  var vineMat = new THREE.MeshStandardMaterial({ color: col('#3f6b2a'), roughness: 1 }), rootMat = new THREE.MeshStandardMaterial({ color: col('#5e4430'), roughness: 1 });
+  for (var v = 0; v < 70; v++) {
+    var a = rng() * Math.PI * 2, len = 0.8 + rng() * 3.5, p = rimAt(a, 0.15);
+    var vine = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, len, 4), rng() < 0.6 ? vineMat : rootMat);
+    vine.position.set(p.x, -0.4 - len / 2, p.z); vine.rotation.z = (rng() - 0.5) * 0.25; scene.add(vine);
+  }
+  var rockMat = new THREE.MeshStandardMaterial({ color: col('#7a736a'), roughness: 1, flatShading: true });
+  for (var s = 0; s < 28; s++) {
+    var sa = rng() * Math.PI * 2, ring = 3 + Math.floor(rng() * 2), vtx = main.rings[ring][Math.floor(rng() * 72)];
+    var h = 2 + rng() * 4, st = new THREE.Mesh(new THREE.ConeGeometry(0.5 + rng() * 0.8, h, 6), rockMat);
+    st.rotation.x = Math.PI; st.position.set(vtx.x * 0.92, vtx.y - 0.1 - h / 2 - 0.1, vtx.z * 0.92); scene.add(st);
+  }
+  for (var c = 0; c < 9; c++) {
+    var cv = main.rings[2 + Math.floor(rng() * 3)][Math.floor(rng() * 72)];
+    crystals(cv.x * 0.97, cv.y - 0.3, cv.z * 0.97, rng() < 0.5 ? '#6be6ff' : '#b06bff', 4, 1.1, scene).rotation.x = Math.PI;
+  }
+
+  // Pond + stream + waterfall pouring off the front-left edge (visible from the default camera).
+  var waterTex = waterTexture(), streamTex = waterTex.clone(); streamTex.needsUpdate = true;
+  var waterMat = new THREE.MeshStandardMaterial({ color: col('#4fb2ea'), emissive: col('#1f6fa8'), emissiveIntensity: 0.25, roughness: 0.15, metalness: 0.1 });
+  var pond = new THREE.Mesh(new THREE.CircleGeometry(2.3, 24), waterMat); pond.rotation.x = -Math.PI / 2; pond.position.set(-3, 0.02, 13.6); scene.add(pond);
+  var edgeZ = 14; while (Math.hypot(-3, edgeZ) < main.outline(Math.atan2(edgeZ, -3)) - 0.05) edgeZ += 0.05;
+  var streamLen = edgeZ - 15.4;
+  var stream = new THREE.Mesh(new THREE.PlaneGeometry(1.5, streamLen), new THREE.MeshStandardMaterial({ map: streamTex, transparent: true, roughness: 0.2 }));
+  stream.rotation.x = -Math.PI / 2; stream.position.set(-3, 0.03, 15.4 + streamLen / 2); scene.add(stream);
+  var fall = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 24), new THREE.MeshStandardMaterial({ map: waterTex, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, emissive: col('#9fd8ff'), emissiveIntensity: 0.35 }));
+  fall.position.set(-3, -12, edgeZ + 0.25); scene.add(fall);
+  waterTex.repeat.set(1, 3);
+  ANIMS.push(function (t, dt) { waterTex.offset.y += dt * 0.9; streamTex.offset.y -= dt * 0.35; });
+  [[-3, -0.2, edgeZ + 0.5, 1.2], [-3, -23, edgeZ + 1.5, 3]].forEach(function (m) { cloud(m[0], m[1], m[2], m[3]); });   // spray + mist
+
+  // Rim vegetation: trees, bushes, rocks, flowers and crystals between the base and the edge.
+  var trees = ['tree_default', 'tree_oak', 'tree_fat', 'tree_pineTallA', 'tree_pineRoundA', 'tree_pineDefaultA', 'tree_default_dark', 'tree_oak_dark'];
+  var small = ['plant_bushDetailed', 'plant_bush', 'flower_redA', 'flower_yellowA', 'flower_purpleA', 'rock_largeA', 'stone_largeA', 'mushroom_redGroup', 'stump_round', 'grass_large'];
+  for (var k = 0; k < 520; k++) {
+    var ka = rng() * Math.PI * 2, kr = 10.6 + rng() * (main.outline(ka) - 11.4);
+    var x = Math.cos(ka) * kr, z = Math.sin(ka) * kr;
+    if (Math.abs(x) < HALF + 0.6 && Math.abs(z) < HALF + 0.6) continue;           // keep the base clear
+    if (Math.hypot(x + 3, z - 13.6) < 2.8 || (Math.abs(x + 3) < 1.3 && z > 13)) continue;   // pond + stream
+    var front = x + z > 21;                                                          // camera side: low plants only
+    if (!front && rng() < 0.45) {
+      var tr = kit(trees[Math.floor(rng() * trees.length)], x, 0, z, rng() * 6, 2 + rng() * 1.3, scene);
+      var near = Math.abs(x) < HALF + 6 && Math.abs(z) < HALF + 6;
+      tr.traverse(function (o) { if (o.isMesh) o.castShadow = near; });
+    } else if (rng() < 0.06) crystals(x, 0, z, rng() < 0.5 ? '#6be6ff' : '#b06bff', 3, 0.9, scene);
+    else kit(small[Math.floor(rng() * small.length)], x, 0, z, rng() * 6, 1.8 + rng(), scene);
+  }
+
+  /* ---- Satellite islands (gently bobbing) ---- */
+  function satellite(x, y, z, r, depth, decorate) {
+    var g = new THREE.Group(), isl = makeIsland(r, depth, 32);
+    g.add(isl.mesh); g.position.set(x, y, z); scene.add(g);
+    if (decorate) decorate(g, isl);
+    var ph = rng() * 6;
+    ANIMS.push(function (t) { g.position.y = y + Math.sin(t * 0.45 + ph) * 0.5; });
+    return g;
+  }
+  // Ruined watch-tower island with its own little waterfall
+  satellite(-36, -3, 8, 6.5, 10, function (g) {
+    kit('tower-square-base', 0, 0, 0, 0.3, 2.4, g); kit('tower-square-mid-windows', 0, 2.42, 0, 0.3, 2.4, g); kit('tower-square-top-roof-high', 0, 4.85, 0, 0.3, 2.4, g);
+    kit('tree_oak', 3, 0, 2, 0, 3, g); kit('tree_pineTallA', -3, 0, -2, 0, 3, g); kit('plant_bushDetailed', 2.5, 0, -3, 0, 2.5, g); kit('rocks-small', -2, 0, 3, 0, 2, g);
+    var f = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 12), fall.material); f.position.set(2, -6, 6.6); g.add(f);
+  });
+  // Crystal island
+  satellite(30, -9, -26, 5, 8, function (g) {
+    crystals(0, 0, 0, '#b06bff', 9, 2.2, g); crystals(2.2, 0, 1.5, '#6be6ff', 5, 1.4, g);
+    var l = new THREE.PointLight('#b06bff', 1.4, 14); l.position.set(0, 3, 0); g.add(l);
+    kit('rock_tallA', -2.5, 0, -1, 0, 2.5, g);
+  });
+  // Great-tree island
+  satellite(-22, 5, -36, 6, 11, function (g) {
+    kit('tree_oak', 0, 0, 0, 0, 7.5, g); kit('plant_bushDetailed', 3, 0, 2, 0, 3, g); kit('plant_bushDetailed', -3, 0, 1, 0, 3, g);
+    kit('mushroom_redGroup', 2, 0, -3, 0, 3, g); kit('flower_yellowA', -2, 0, -3, 0, 3, g);
+  });
+  // White-spire palace island (elegant towers like the mood board, own design)
+  satellite(38, -2, 12, 5.5, 9, function (g) {
+    [[0, 0, 3], [-2.2, 1.6, 2], [2.1, -1.4, 2]].forEach(function (p) {
+      var y0 = 0, s = 1.7;
+      ['tower-hexagon-base', 'tower-hexagon-mid', 'tower-hexagon-mid'].slice(0, p[2]).forEach(function (piece) {
+        tint(kit(piece, p[0], y0, p[1], 0, s, g), '#f4efe2'); y0 += (piece === 'tower-hexagon-base' ? 1.31 : 0.46) * s;
+      });
+      kit('tower-hexagon-roof', p[0], y0, p[1], 0, s, g);
+      kit('flag-pennant', p[0], y0 + 0.8 * s, p[1], 0, s, g);
+    });
+    glow(new THREE.OctahedronGeometry(0.5, 0), '#6be6ff', 1.2, 0, 8.2, 0, g).userData.bob = 8.2;
+    kit('tree_default', -2.8, 0, -2.3, 0, 2.4, g);
+  });
+  // Small floating rocks, two of them chained to the main island
+  for (var fr = 0; fr < 14; fr++) {
+    var fa = rng() * Math.PI * 2, fd = MAIN_R + 5 + rng() * 22, fy = -6 + rng() * 10;
+    var rockIsland = satellite(Math.cos(fa) * fd, fy, Math.sin(fa) * fd, 0.8 + rng() * 1.4, 2 + rng() * 3, function (g, isl) {
+      if (rng() < 0.5) kit('plant_bush', 0, 0, 0, 0, 2, g);
+    });
+  }
+  var chained = [[-0.78, 6], [2.45, 6.5]];                                           // screen-right and screen-left of the island
+  chained.forEach(function (c) {
+    var rim = rimAt(c[0], 0.2), out = rim.clone().setLength(rim.length() + c[1]);
+    var rockG = satellite(out.x, -2.5, out.z, 1.6, 3.5, function (g) { crystals(0, 0, 0, '#6be6ff', 4, 1, g); });
+    chain(new THREE.Vector3(rim.x, -0.5, rim.z), new THREE.Vector3(out.x, -2.3, out.z), 1.2);
+  });
+  // Far-away islands fading into the haze
+  [[-95, 8, -40, 16], [70, -6, -85, 14], [-60, -14, 70, 12], [105, 4, 30, 18], [10, 12, -120, 20]].forEach(function (d) {
+    satellite(d[0], d[1], d[2], d[3], d[3] * 1.4, function (g) {
+      for (var i = 0; i < 10; i++) { var a = rng() * 6.28, r = rng() * d[3] * 0.7; kit(trees[i % trees.length], Math.cos(a) * r, 0, Math.sin(a) * r, 0, 4 + rng() * 3, g); }
+    });
+  });
+
+  /* ---- Clouds: a sea far below + drifting puffs at island height ---- */
+  for (var cs = 0; cs < 26; cs++) cloud((rng() - 0.5) * 220, -34 - rng() * 8, (rng() - 0.5) * 220, 5 + rng() * 6);   // sparse, so the blue sky shows
+  var drifting = [];
+  for (var cd = 0; cd < 12; cd++) {
+    var ca = rng() * Math.PI * 2, cr = 30 + rng() * 45;
+    drifting.push(cloud(Math.cos(ca) * cr, -12 + rng() * 12, Math.sin(ca) * cr, 1.6 + rng() * 2.2));
+  }
+  ANIMS.push(function (t, dt) { drifting.forEach(function (c) { c.position.x += dt * 0.8; if (c.position.x > 90) c.position.x = -90; }); });
+
+  /* ---- Dragons circling the sky ---- */
+  flyingDragon('#6a4bd8', 34, 14, 0.12, 0);
+  flyingDragon('#2f86c4', 44, 9, -0.09, 2.5);
+}
+
 /* ============================ World ============================ */
 var buildings = [];
 function buildWorld() {
-  // Meadow + checkered buildable base
-  var meadow = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), new THREE.MeshStandardMaterial({ color: col('#3f7a32'), roughness: 1 }));
-  meadow.rotation.x = -Math.PI / 2; meadow.position.y = -0.03; meadow.receiveShadow = true; scene.add(meadow);
+  buildSkyWorld();                                   // floating islands, waterfall, clouds, dragons
+  // Checkered buildable base (sits on top of the main island)
   var tileGeo = new THREE.BoxGeometry(1, 0.1, 1), mA = new THREE.MeshStandardMaterial({ color: col('#62a843'), roughness: 1 }), mB = new THREE.MeshStandardMaterial({ color: col('#6bb24a'), roughness: 1 });
   for (var i = 0; i < GRID; i++) for (var j = 0; j < GRID; j++) {
     var t = new THREE.Mesh(tileGeo, (i + j) % 2 ? mA : mB); t.position.set(i - HALF + 0.5, -0.05, j - HALF + 0.5); t.receiveShadow = true; scene.add(t);
-  }
-  // River with sandy banks
-  function strip(x, w, color, y, opacity) {
-    var s = new THREE.Mesh(new THREE.PlaneGeometry(w, 130), new THREE.MeshStandardMaterial({ color: col(color), roughness: opacity ? 0.15 : 1, transparent: !!opacity, opacity: opacity || 1 }));
-    s.rotation.x = -Math.PI / 2; s.rotation.z = 0.25; s.position.set(x, y, 0); s.receiveShadow = true; scene.add(s);
-  }
-  strip(-HALF - 9, 9, '#e2cf96', 0.0); strip(-HALF - 9, 6, '#3a93cf', 0.01, 0.93);
-  function inRiver(x, z) { return Math.abs(x - (-HALF - 9 - Math.tan(0.25) * z)) < 5.5; }
-  // Forest, rocks and flowers from the Nature kit
-  var trees = ['tree_default', 'tree_oak', 'tree_fat', 'tree_pineTallA', 'tree_pineRoundA', 'tree_pineDefaultA', 'tree_default_dark', 'tree_oak_dark'];
-  for (var k = 0; k < 340; k++) {
-    var x = (rng() - 0.5) * 100, z = (rng() - 0.5) * 100;
-    if (Math.abs(x) < HALF + 2.5 && Math.abs(z) < HALF + 2.5) continue;
-    if (inRiver(x, z) || (x > 4 && z > 4 && x + z < 40)) continue;
-    var tr = kit(trees[Math.floor(rng() * trees.length)], x, 0, z, rng() * 6, 2.2 + rng() * 1.2, scene);
-    var near = Math.abs(x) < HALF + 8 && Math.abs(z) < HALF + 8;
-    tr.traverse(function (o) { if (o.isMesh) o.castShadow = near; });
-  }
-  var deco = ['rock_largeA', 'rock_largeB', 'stone_largeA', 'plant_bushDetailed', 'flower_redA', 'flower_yellowA', 'stump_round', 'mushroom_redGroup', 'log_stack'];
-  for (var r = 0; r < 90; r++) {
-    var rx = (rng() - 0.5) * 60, rz = (rng() - 0.5) * 60;
-    if (Math.abs(rx) < HALF + 1.2 && Math.abs(rz) < HALF + 1.2) continue;
-    if (inRiver(rx, rz)) continue;
-    kit(deco[Math.floor(rng() * deco.length)], rx, 0, rz, rng() * 6, 2 + rng(), scene);
   }
 
   buildings = [
@@ -480,8 +711,9 @@ loadKits(function () {
   var zq = /zoom=([\d.]+)/.exec(location.search); if (zq) zoomBy(Number(zq[1]));   // e.g. ?th=2&zoom=0.4 for close-ups
   document.getElementById('loading').style.display = 'none';
   (function loop() {
-    var t = clock.getElapsedTime();
+    var dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime;
     controls.update();
+    ANIMS.forEach(function (fn) { fn(t, dt); });
     scene.traverse(function (o) { if (o.userData.bob !== undefined) { o.position.y = o.userData.bob + Math.sin(t * 2 + o.id) * 0.06; o.rotation.y = t; } });
     renderer.render(scene, camera);
     requestAnimationFrame(loop);

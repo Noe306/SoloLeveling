@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Habitat Preview</title>
+<style>
+  /* Preview page: one element habitat at upgrade levels 1 and 2, side by side.
+     Same look as the village (sky, grass plots, System HUD). Drag to turn, scroll to zoom. */
+  :root { --panel: rgba(6,16,38,.88); --line-hi: #4aa3ff; --text: #d6e8ff; --muted: #7f9bc4; --cyan: #6be6ff; --glow: rgba(74,163,255,.45); }
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: "Bahnschrift", "Segoe UI", system-ui, sans-serif; color: var(--text); background: #6fb6ea; }
+  canvas { display: block; touch-action: none; }
+  .win { position: fixed; background: var(--panel); border: 1px solid var(--line-hi); box-shadow: 0 0 16px var(--glow); }
+  .title { top: 12px; left: 50%; transform: translateX(-50%); padding: .5rem 1rem; text-align: center; }
+  .title b { display: block; color: var(--cyan); letter-spacing: .2em; text-transform: uppercase; text-shadow: 0 0 10px var(--glow); }
+  .title small { color: var(--muted); letter-spacing: .08em; }
+  .tag { position: fixed; padding: .3rem .7rem; font-weight: 800; letter-spacing: .2em; color: #fff; background: var(--panel); border: 1px solid var(--line-hi); text-shadow: 0 0 8px var(--cyan); transform: translate(-50%, 0); pointer-events: none; }
+  .loading { position: fixed; inset: 0; display: grid; place-content: center; background: #02050d; color: var(--cyan); letter-spacing: .3em; font-weight: 700; z-index: 10; }
+</style>
+</head>
+<body>
+<div class="loading" id="loading">[ SYSTEM ] LOADING…</div>
+<div class="win title"><b>Ice Habitat</b><small>Level 1 → Level 2 · drag to turn · scroll to zoom</small></div>
+<div class="tag" id="tag1">LEVEL 1</div>
+<div class="tag" id="tag2">LEVEL 2</div>
+
+<script src="../vendor/three/three.min.js"></script>
+<script src="../vendor/three/OrbitControls.js"></script>
+<script src="../vendor/three/GLTFLoader.js"></script>
+<script src="../assets/model-pack.js"></script>
+<script>
+/* ============================ Shared setup (same conventions as village-3d.html) ============================ */
+function col(hex) { return new THREE.Color(hex).convertSRGBToLinear(); }
+var renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.outputEncoding = THREE.sRGBEncoding;
+document.body.prepend(renderer.domElement);
+var scene = new THREE.Scene();
+scene.background = (function () {
+  var c = document.createElement('canvas'); c.width = 4; c.height = 512;
+  var x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0, '#2a74c4'); g.addColorStop(0.5, '#7fc0ee'); g.addColorStop(1, '#e8f5ff');
+  x.fillStyle = g; x.fillRect(0, 0, 4, 512); var t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+})();
+var camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(8.5, 8.2, 8.5);
+var controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.6, 0); controls.enableDamping = true; controls.enablePan = false;
+controls.minDistance = 5; controls.maxDistance = 20; controls.maxPolarAngle = 1.3;
+controls.autoRotate = true; controls.autoRotateSpeed = 0.6;
+scene.add(new THREE.HemisphereLight('#e2f2ff', '#8a9aa6', 0.8));
+var sun = new THREE.DirectionalLight('#fff1d6', 1.05); sun.position.set(-6, 12, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6 }); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.02;
+scene.add(sun);
+
+var KIT = {}, ANIMS = [];
+var PALETTE = { leafsGreen: '#4f9e3a', leafsDark: '#2f6e34', grass: '#5fae45', woodBark: '#7a5232', woodBarkDark: '#5e3d26', dirt: '#8a6a45', stone: '#a3a8aa', stoneDark: '#767d80' };
+function loadKits(done) {
+  var pack = window.MODEL_PACK, keys = Object.keys(pack.glb), left = keys.length, manager = new THREE.LoadingManager();
+  manager.setURLModifier(function (url) { for (var k in pack.tex) if (url.slice(-k.length) === k) return pack.tex[k]; return url; });
+  var loader = new THREE.GLTFLoader(manager);
+  keys.forEach(function (key) {
+    var bin = atob(pack.glb[key]), buf = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    loader.parse(buf.buffer, key.split('/')[0] + '/', function (gltf) {
+      gltf.scene.traverse(function (o) { if (o.isMesh) { o.castShadow = o.receiveShadow = true; o.material.metalness = 0; o.material.roughness = Math.max(0.7, o.material.roughness); if (PALETTE[o.material.name]) o.material.color.copy(col(PALETTE[o.material.name])); } });
+      KIT[key.split('/')[1]] = gltf.scene; if (--left === 0) done();
+    }, function () { if (--left === 0) done(); });
+  });
+}
+function kit(name, x, y, z, rot, scale, parent) {
+  var o = KIT[name].clone(true); o.position.set(x, y, z); o.rotation.y = rot || 0;
+  if (scale) typeof scale === 'number' ? o.scale.setScalar(scale) : o.scale.set(scale[0], scale[1], scale[2]);
+  parent.add(o); return o;
+}
+function tint(o, color) { o.traverse(function (m) { if (m.isMesh) { m.material = m.material.clone(); m.material.color.copy(col(color)); } }); return o; }
+function mesh(geo, mat, x, y, z, parent) { var m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; parent.add(m); return m; }
+var rng = (function (s) { return function () { s |= 0; s = s + 0x6D2B79F5 | 0; var t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; })(5);
+
+/* ============================ ICE HABITAT ============================
+   Own design inspired by "ice crystals around a frozen pool on a snowy base".
+   Footprint: 3x3 tiles (radius ~1.5). Level 2 is built ON TOP of level 1 (upgrades add layers). */
+var MAT = {
+  snow: new THREE.MeshStandardMaterial({ color: col('#e9f3fb'), emissive: col('#cfe8ff'), emissiveIntensity: 0.04, roughness: 0.9, flatShading: true }),
+  snowShade: new THREE.MeshStandardMaterial({ color: col('#d8ebfa'), roughness: 0.9, flatShading: true }),
+  iceRock: new THREE.MeshStandardMaterial({ color: col('#8fb2c9'), roughness: 0.8, flatShading: true }),
+  crystal: new THREE.MeshStandardMaterial({ color: col('#bfefff'), emissive: col('#3fb6f0'), emissiveIntensity: 0.45, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.82, flatShading: true }),
+  core: new THREE.MeshStandardMaterial({ color: col('#e9fbff'), emissive: col('#8fe3ff'), emissiveIntensity: 0.9, roughness: 0.2, flatShading: true }),
+  pool: new THREE.MeshStandardMaterial({ color: col('#6fd0f5'), emissive: col('#1f8fc8'), emissiveIntensity: 0.45, roughness: 0.05, metalness: 0.2 }),
+  poolDeep: new THREE.MeshStandardMaterial({ color: col('#2a7fc0'), emissive: col('#164f8a'), emissiveIntensity: 0.4, roughness: 0.1 }),
+  rune: new THREE.MeshStandardMaterial({ color: col('#9ff0ff'), emissive: col('#6be6ff'), emissiveIntensity: 1.4, roughness: 0.3 })
+};
+
+// Hexagonal ice crystal: glassy prism + pointed tip + glowing inner core.
+function iceCrystal(h, r, parent, x, z, tiltX, tiltZ) {
+  var g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.set(tiltX || 0, rng() * Math.PI, tiltZ || 0); parent.add(g);
+  mesh(new THREE.CylinderGeometry(r, r * 1.08, h, 6), MAT.crystal, 0, h / 2, 0, g);
+  mesh(new THREE.ConeGeometry(r, r * 1.6, 6), MAT.crystal, 0, h + r * 0.8, 0, g);
+  var core = mesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, h * 0.85, 6), MAT.core, 0, h * 0.45, 0, g); core.castShadow = false;
+  return g;
+}
+// Snow lump (squashed faceted sphere)
+function snowLump(x, y, z, s, parent) { var m = mesh(new THREE.IcosahedronGeometry(s, 0), MAT.snow, x, y, z, parent); m.scale.y = 0.55; m.rotation.y = rng() * 6; return m; }
+
+function iceHabitat(level) {
+  var g = new THREE.Group();
+
+  /* ---- LEVEL 1: snowy plateau, small frozen pool, a few young crystals ---- */
+  mesh(new THREE.CylinderGeometry(1.3, 1.05, 0.35, 9), MAT.iceRock, 0, 0.17, 0, g);              // icy rock underside
+  var slab = mesh(new THREE.CylinderGeometry(1.42, 1.32, 0.22, 12), MAT.snow, 0, 0.44, 0, g);    // snow top
+  for (var i = 0; i < 12; i++) { var a = i / 12 * Math.PI * 2 + rng() * 0.3; snowLump(Math.cos(a) * 1.3, 0.55, Math.sin(a) * 1.3, 0.16 + rng() * 0.12, g); }
+  var pool = mesh(new THREE.CylinderGeometry(0.58, 0.58, 0.04, 24), MAT.pool, 0.25, 0.56, 0.25, g);
+  mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.045, 20), MAT.poolDeep, 0.25, 0.565, 0.25, g);
+  var crystalBase = new THREE.Group(); crystalBase.position.y = 0.55; g.add(crystalBase);
+  iceCrystal(0.75, 0.13, crystalBase, -0.55, -0.45, 0.12, -0.15);
+  iceCrystal(0.5, 0.1, crystalBase, -0.25, -0.75, -0.1, 0.1);
+  iceCrystal(0.38, 0.08, crystalBase, -0.85, -0.1, 0.05, 0.25);
+  tint(kit('rock_largeA', 0.75, 0.55, -0.55, 0.6, 1.2, g), '#e8f4ff');
+  tint(kit('stone_largeA', -0.7, 0.55, 0.75, 2, 1.1, g), '#dceefc');
+  // No egg here: eggs live in the Hatchery; the habitat is where the grown dragon will rest.
+
+  if (level >= 2) {
+    /* ---- LEVEL 2 adds: snow drift at the back, tall crystal spire cluster, rune ring on a bigger pool,
+            floating ice shards, frosted pines, icicles, sparkling snow and a cold glow ---- */
+    var drift = mesh(new THREE.SphereGeometry(0.9, 10, 7, 0, Math.PI * 2, 0, Math.PI / 2), MAT.snowShade, -0.6, 0.55, -0.6, g); drift.scale.set(1.1, 0.55, 1.1);
+    var spire = new THREE.Group(); spire.position.set(-0.6, 0.78, -0.6); g.add(spire);
+    iceCrystal(1.9, 0.2, spire, 0, 0, 0, 0);
+    iceCrystal(1.35, 0.16, spire, 0.32, -0.05, 0.05, -0.35);
+    iceCrystal(1.2, 0.15, spire, -0.25, 0.25, 0.3, 0.2);
+    iceCrystal(0.9, 0.12, spire, 0.05, -0.35, -0.35, 0.05);
+    iceCrystal(0.7, 0.1, spire, 0.35, 0.3, 0.25, -0.4);
+    // Bigger pool with a glowing rune ring and drifting ice floes
+    pool.scale.set(1.35, 1, 1.35);
+    var ring = mesh(new THREE.TorusGeometry(0.86, 0.025, 6, 48), MAT.rune, 0.25, 0.585, 0.25, g); ring.rotation.x = Math.PI / 2; ring.castShadow = false;
+    for (var r = 0; r < 8; r++) { var ra = r / 8 * Math.PI * 2; var dot = mesh(new THREE.OctahedronGeometry(0.035, 0), MAT.rune, 0.25 + Math.cos(ra) * 0.86, 0.6, 0.25 + Math.sin(ra) * 0.86, g); dot.castShadow = false; }
+    [[0.55, 0.05], [-0.05, 0.5], [0.5, 0.55]].forEach(function (f) { var fl = mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.03, 6), MAT.snow, f[0], 0.59, f[1], g); fl.rotation.y = rng() * 3; });
+    // Floating shards orbiting above the pool
+    var shards = new THREE.Group(); shards.position.set(0.25, 1.2, 0.25); g.add(shards);
+    for (var s = 0; s < 4; s++) { var sh = mesh(new THREE.OctahedronGeometry(0.08, 0), MAT.crystal, Math.cos(s * 1.57) * 0.45, Math.sin(s * 2) * 0.1, Math.sin(s * 1.57) * 0.45, shards); sh.scale.y = 1.8; }
+    ANIMS.push(function (t) { shards.rotation.y = t * 0.8; shards.position.y = 1.2 + Math.sin(t * 1.5) * 0.06; });
+    // Frosted pines and extra crystals along the rim
+    tint(kit('tree_pineTallA', 1.0, 0.55, -0.85, 0, 1.25, g), '#e3f3ff');
+    tint(kit('tree_pineRoundA', -1.05, 0.55, 0.55, 0, 1.1, g), '#d6ecfb');
+    [[0.95, 0.55], [1.05, 0.1], [0.35, 1.05], [-0.3, 1.0]].forEach(function (c) { iceCrystal(0.25 + rng() * 0.2, 0.06, crystalBase, c[0], c[1], (rng() - 0.5) * 0.6, (rng() - 0.5) * 0.6); });
+    // Icicles hanging under the front rim
+    for (var k = 0; k < 14; k++) {
+      var ka = -0.4 + k / 13 * 2.2, len = 0.15 + rng() * 0.3;
+      var ic = mesh(new THREE.ConeGeometry(0.045, len, 5), MAT.crystal, Math.cos(ka) * 1.36, 0.33 - len / 2, Math.sin(ka) * 1.36, g); ic.rotation.x = Math.PI;
+    }
+    // Sparkling snow rising from the pool
+    var N = 50, pos = new Float32Array(N * 3);
+    for (var p = 0; p < N; p++) { pos[p * 3] = 0.25 + (rng() - 0.5) * 1.4; pos[p * 3 + 1] = 0.6 + rng() * 1.8; pos[p * 3 + 2] = 0.25 + (rng() - 0.5) * 1.4; }
+    var pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    var sparks = new THREE.Points(pg, new THREE.PointsMaterial({ color: col('#ffffff'), size: 0.05, transparent: true, opacity: 0.9 })); g.add(sparks);
+    ANIMS.push(function (t, dt) { for (var q = 0; q < N; q++) { pos[q * 3 + 1] += dt * 0.25; if (pos[q * 3 + 1] > 2.5) pos[q * 3 + 1] = 0.6; } pg.attributes.position.needsUpdate = true; });
+    var light = new THREE.PointLight('#8fe3ff', 1.1, 4); light.position.set(-0.4, 1.6, -0.4); g.add(light);
+  }
+  return g;
+}
+
+/* ============================ Scene: two 3x3 grass plots ============================ */
+function plot(x) {
+  var g = new THREE.Group(); g.position.x = x; scene.add(g);
+  for (var i = 0; i < 3; i++) for (var j = 0; j < 3; j++) {
+    var t = mesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshStandardMaterial({ color: col((i + j) % 2 ? '#62a843' : '#6bb24a'), roughness: 1 }), i - 1, -0.05, j - 1, g);
+    t.castShadow = false;
+  }
+  var dirt = mesh(new THREE.BoxGeometry(3, 0.5, 3), new THREE.MeshStandardMaterial({ color: col('#8a6a45'), roughness: 1 }), 0, -0.35, 0, g); dirt.castShadow = false;
+  return g;
+}
+var tags = [];
+loadKits(function () {
+  [[-2, 1], [2, 2]].forEach(function (d) {
+    var p = plot(d[0]); p.add(iceHabitat(d[1]));
+    tags.push({ el: document.getElementById('tag' + d[1]), pos: new THREE.Vector3(d[0], -0.6, 1.7) });
+  });
+  document.getElementById('loading').style.display = 'none';
+  var clock = new THREE.Clock();
+  (function loop() {
+    var dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime;
+    controls.update();
+    ANIMS.forEach(function (fn) { fn(t, dt); });
+    tags.forEach(function (tg) {                                     // HTML labels follow the plots
+      var v = tg.pos.clone().project(camera);
+      tg.el.style.left = ((v.x + 1) / 2 * innerWidth) + 'px'; tg.el.style.top = ((1 - v.y) / 2 * innerHeight) + 'px';
+    });
+    renderer.render(scene, camera); requestAnimationFrame(loop);
+  })();
+});
+addEventListener('resize', function () { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+</script>
+</body>
+</html>
