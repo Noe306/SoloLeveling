@@ -7,6 +7,7 @@ initTasks();
 initTimer();
 initShop();
 initDaily();
+initAuth();            // optional account + cloud saves (website only)
 renderAll();
 runDailyCheck();       // new day? judge yesterday, apply any penalty, create today's 3 daily quests
 

@@ -164,7 +164,9 @@ function initUI() {
   });
 
   $('resetBtn').addEventListener('click', function () {
-    confirmDialog('Reset Save Data', 'This permanently deletes your level, gold, tasks, dragons and Hall of Fame. Continue?', 'Delete Everything', function () {
+    var cloud = typeof AUTH !== 'undefined' && AUTH.user;   // logged in: the reset also reaches the account's cloud save
+    confirmDialog('Reset Save Data', 'This permanently deletes your level, gold, tasks, dragons and Hall of Fame' +
+      (cloud ? ', on this device AND in your account\'s cloud save (all devices). Your account and username are kept' : '') + '. Continue?', 'Delete Everything', function () {
       resetState();
     });
   });

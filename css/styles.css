@@ -123,10 +123,10 @@ main { max-width: 1100px; margin: 0 auto; padding: 1rem 1.25rem 2rem; }
 .chip { background: rgba(6, 16, 38, .7); color: var(--muted); border: 1px solid var(--line); border-radius: 2px; padding: .4rem .9rem; cursor: pointer; font: 700 .8rem var(--font); letter-spacing: .1em; text-transform: uppercase; min-height: 38px; }
 .chip.active { color: #fff; border-color: var(--line-hi); background: rgba(30, 90, 200, .5); box-shadow: 0 0 10px var(--glow); }
 .chip:disabled { opacity: .45; cursor: not-allowed; }
-input[type=text], input[type=number], select {
+input[type=text], input[type=number], input[type=email], input[type=password], select {
   width: 100%; background: rgba(0, 0, 0, .45); color: var(--text); border: 1px solid var(--line); border-radius: 2px; padding: .6rem .75rem; font: inherit; min-height: 42px;
 }
-input[type=text]:focus, input[type=number]:focus, select:focus { border-color: var(--cyan); box-shadow: 0 0 10px var(--glow); outline: none; }
+input[type=text]:focus, input[type=number]:focus, input[type=email]:focus, input[type=password]:focus, select:focus { border-color: var(--cyan); box-shadow: 0 0 10px var(--glow); outline: none; }
 label { display: block; font: 700 .72rem var(--font); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 label > select, label > input { margin-top: .3rem; text-transform: none; letter-spacing: normal; font-weight: 400; }
 .badge { display: inline-block; font: 700 .68rem var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: .1rem .5rem; border: 1px solid var(--line); background: rgba(14, 32, 66, .6); margin-right: .3rem; }
@@ -159,6 +159,30 @@ label > select, label > input { margin-top: .3rem; text-transform: none; letter-
 .stat-row .stat-val { width: 2.4rem; text-align: right; color: var(--cyan); text-shadow: 0 0 8px var(--glow); }
 .stat-row .stat-bar { flex: 1; height: 5px; background: rgba(0, 0, 0, .55); border: 1px solid var(--line); }
 .stat-row .stat-bar i { display: block; height: 100%; background: linear-gradient(90deg, #1b56c8, var(--cyan)); box-shadow: 0 0 8px var(--glow); }
+
+/* ----- Account (header button + log in / create account window) ----- */
+.account-btn {
+  height: 40px; padding: 0 .8rem; border-radius: 2px; cursor: pointer; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: rgba(14, 32, 66, .7); border: 1px solid var(--line-hi); color: var(--cyan); font: 700 .78rem var(--font); letter-spacing: .12em; text-transform: uppercase;
+}
+.account-btn:hover { box-shadow: 0 0 12px var(--glow); border-color: var(--cyan); }
+.account-btn.logged { color: #fff; text-transform: none; letter-spacing: .04em; }
+.account-btn.warn { border-color: var(--gold); color: var(--gold); }
+.auth-modal { text-align: left; }
+.auth-modal h2, .auth-modal .sys-tag { text-align: center; }
+.auth-tabs { display: flex; gap: .4rem; justify-content: center; margin: .4rem 0 1rem; }
+.auth-form { display: grid; gap: .7rem; }
+.auth-form label { display: grid; gap: .3rem; }
+.auth-form label input { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.auth-hint { margin: 0; font-size: .78rem; }
+.auth-msg { margin: 0; min-height: 1.2em; font-size: .85rem; }
+.auth-msg.bad { color: var(--red); }
+.auth-msg.good { color: var(--green); }
+.auth-link { background: none; border: none; color: var(--accent); cursor: pointer; font: inherit; font-size: .8rem; justify-self: center; text-decoration: underline; }
+.save-choice { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin: .8rem 0; }
+.save-choice > div { display: grid; gap: .2rem; padding: .6rem; border: 1px solid var(--line-hi); background: rgba(30, 90, 200, .15); }
+.save-choice span { font: 700 .85rem var(--mono); color: var(--cyan); }
+.save-choice small { color: var(--muted); font-size: .72rem; }
 
 /* ----- Daily quests ----- */
 .daily-window { margin-bottom: 1rem; border-color: var(--line-hi); }

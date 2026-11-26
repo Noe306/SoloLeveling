@@ -234,6 +234,7 @@ function loadState() {
 
 function saveState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState)); } catch (e) { /* storage full/blocked */ }
+  if (typeof onLocalSaved === 'function') onLocalSaved();   // auth.js: mark changed + push to the cloud when logged in
 }
 
 var gameState = loadState();
