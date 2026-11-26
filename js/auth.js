@@ -83,7 +83,11 @@ function pushSave() {
     })
     .catch(function (e) { console.warn('Cloud save failed', e); setSyncStatus(navigator.onLine ? 'error' : 'offline'); });
 }
-function flushPush() { return AUTH.pushTimer || AUTH.status === 'saving' ? pushSave() : Promise.resolve(); }
+// Upload now if anything is waiting (pending timer, save in progress, or a change not yet uploaded).
+function flushPush() {
+  return AUTH.pushTimer || AUTH.status === 'saving' || AUTH.status === 'error' || AUTH.status === 'offline' || readSync().dirty
+    ? pushSave() : Promise.resolve();
+}
 
 /* ---------- Cloud save: load ---------- */
 function applyCloud(cloud) {
@@ -178,10 +182,36 @@ function logIn(username, password) {
   }).then(function (r) { if (r.error) throw r.error; });
 }
 
-function logOut() {
-  return flushPush().then(function () { return AUTH.client.auth.signOut(); }).then(function () {
-    systemNotify({ title: 'Logged Out', lines: ['Your progress is saved in your account. This device keeps a copy for guest play.'] });
+// Log Out = upload the latest progress, sign out, then CLEAR THIS DEVICE back to a
+// fresh guest save (nothing of the account stays visible). The progress is safe in
+// the account and comes back on the next log in.
+// If the upload fails (e.g. offline), ask first so unsaved progress is never lost silently.
+function logOut(force) {
+  return flushPush().then(function () {
+    if (!force && AUTH.status !== 'synced') {
+      confirmDialog('Log out?', 'Your latest progress could not be saved to your account (you may be offline). ' +
+        'Logging out clears this device, so that unsaved progress would be lost.', 'Log out anyway', function () { logOut(true); });
+      return;
+    }
+    return AUTH.client.auth.signOut().then(function () {
+      clearDevice();
+      systemNotify({ title: 'Logged Out', lines: ['Your progress is safe in your account.', 'This device was cleared. Log in again to continue.'] });
+    });
   });
+}
+
+// Reset this device to a brand-new guest save (used after Log Out).
+function clearDevice() {
+  AUTH.applying = true;                                               // not a player change: don't mark it for upload
+  try {
+    gameState = defaultState();
+    if (typeof lastDragonKey !== 'undefined') lastDragonKey = '';
+    checkDailyRollover();
+    saveState();
+    try { localStorage.removeItem(SYNC_KEY); } catch (e) { /* storage blocked */ }
+  } finally { AUTH.applying = false; }
+  $('modalRoot').innerHTML = '';
+  renderAll();
 }
 
 /* ---------- UI: header account button ---------- */
