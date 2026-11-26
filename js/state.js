@@ -74,17 +74,32 @@ function rankForLevel(level) {
   return 'E';
 }
 
+// Rank order, lowest to highest. The SHOWN rank can be lowered by the daily-quest
+// penalty (see js/daily.js); the level itself never changes because of it.
+var RANKS = ['E', 'D', 'C', 'B', 'A', 'S'];
+function displayRank() {
+  var base = RANKS.indexOf(rankForLevel(gameState.player.level));
+  return RANKS[Math.max(0, base - gameState.daily.rankPenalty)];
+}
+
 // Quest difficulty shown as a rank letter in the quest log.
 var DIFFICULTY_RANK = { Easy: 'E', Medium: 'C', Hard: 'A' };
 
-// Each completed quest adds this many stat points to its category's stat.
+// Stat progress from your own quests (cumulative over time, per category):
+//   5 Easy quests = +1 point, 3 Medium = +1 point, 1 Hard = +1 point.
+// Kept as whole "units" to avoid rounding: 15 units = 1 point; Easy 3, Medium 5, Hard 15.
+// Mixed difficulties add up (e.g. 2 Easy + 2 Medium = 16 units = +1 point, 1 unit carried over).
+var UNITS_PER_POINT = 15;
+var QUEST_STAT_UNITS = { Easy: 3, Medium: 5, Hard: 15 };
+var QUEST_STAT_LABEL = { Easy: '1/5 stat point', Medium: '1/3 stat point', Hard: '+1 stat point' };
+// Legacy weights, only used to migrate very old saves (made before stat points were stored).
 var QUEST_STAT_WEIGHT = { Easy: 1, Medium: 2, Hard: 3 };
 var PATIENCE_SESSION_MIN = 25;   // a focus session must last this long to count toward Patience
 
 // Status-window stats. Every stat starts at 10 and each is fed by ONE real activity:
-//   INT      (Study)    Homework quests       +1/+2/+3 per Easy/Medium/Hard
-//   STR      (Work)     Work quests           +1/+2/+3
-//   VIT      (Life)     Chores/Life quests    +1/+2/+3
+//   INT      (Study)    Homework quests       5 Easy / 3 Medium / 1 Hard = +1 (+1 per full daily set)
+//   STR      (Work)     Work quests           5 Easy / 3 Medium / 1 Hard = +1
+//   VIT      (Life)     Chores/Life quests    5 Easy / 3 Medium / 1 Hard = +1
 //   FOCUS    (Focus)    total focus minutes / 10
 //   PATIENCE (Patience) +2 per completed focus session of 25+ min, +1 per 15 min of
 //                       your longest session, -1 per abandoned session (never below 10)
@@ -142,12 +157,23 @@ function defaultState() {
     hallOfFame: [],
     stats: {
       totalTasksCompleted: 0, totalFocusMinutes: 0,
-      questPoints: { Homework: 0, Work: 0, Personal: 0 },  // feeds INT / STR / VIT
+      questPoints: { Homework: 0, Work: 0, Personal: 0 },  // whole stat points earned: feeds INT / STR / VIT
+      questUnits: { Homework: 0, Work: 0, Personal: 0 },   // progress toward the next point (0-14 of 15)
       longSessions: 0,        // completed focus sessions of 25+ minutes
       longestSession: 0,      // minutes of the longest completed session
       sessionsAbandoned: 0
     },
     settings: { muted: false },
+    // Daily quests (js/daily.js): 3 automatic "Learn your <class> lesson" quests per day.
+    daily: {
+      classes: [],           // the player adds their own classes in the app ("My classes")
+      dayKey: null,          // last day (YYYY-MM-DD) the daily quests were generated for
+      rotation: 0,           // where the next day's class rotation starts
+      dayStartRotation: 0,   // rotation used for today's set (lets us regenerate today after editing classes)
+      inactiveStreak: 0,     // days in a row without all daily quests completed
+      statAwardedDay: '',    // day the "+1 INT for the full set" was already given (once per day)
+      rankPenalty: 0         // how many ranks the SHOWN rank is lowered by
+    },
     // In-progress focus session (null when idle). Persisted so a reload resumes it.
     session: null
   };
@@ -191,12 +217,13 @@ function loadState() {
     if (raw) {
       var parsed = JSON.parse(raw);
       var merged = deepMerge(defaultState(), parsed);
-      // Saves made before quest stat points existed: rebuild them once from finished quests.
+      // Saves made before quest stat points existed: rebuild them once from finished quests (current rules).
       if (!(parsed && parsed.stats && parsed.stats.questPoints) && Array.isArray(merged.tasks)) {
         merged.tasks.forEach(function (t) {
-          if (t && t.completed && merged.stats.questPoints[t.category] !== undefined) {
-            merged.stats.questPoints[t.category] += QUEST_STAT_WEIGHT[t.difficulty] || 1;
-          }
+          if (!t || !t.completed || t.daily || merged.stats.questPoints[t.category] === undefined) return;
+          var u = merged.stats.questUnits[t.category] + (QUEST_STAT_UNITS[t.difficulty] || QUEST_STAT_UNITS.Easy);
+          merged.stats.questPoints[t.category] += Math.floor(u / UNITS_PER_POINT);
+          merged.stats.questUnits[t.category] = u % UNITS_PER_POINT;
         });
       }
       return sanitizeState(merged);
@@ -219,6 +246,7 @@ function commit() {
 
 function resetState() {
   gameState = defaultState();
+  if (typeof checkDailyRollover === 'function') checkDailyRollover();   // fresh daily quests right away
   commit();
 }
 

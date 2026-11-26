@@ -154,11 +154,31 @@ label > select, label > input { margin-top: .3rem; text-transform: none; letter-
 .stat-list { display: grid; gap: .45rem; }
 .stat-row { display: flex; align-items: center; gap: .7rem; font: 700 .85rem var(--mono); letter-spacing: .08em; }
 .stat-row .stat-name { width: 2.6rem; flex: none; color: var(--accent); }
-.stat-row .stat-hint { width: 9.5rem; flex: none; font-size: .68rem; line-height: 1.2; color: var(--text); letter-spacing: .12em; text-transform: uppercase; }
+.stat-row .stat-hint { width: 11rem; flex: none; font-size: .68rem; line-height: 1.2; color: var(--text); letter-spacing: .12em; text-transform: uppercase; }
 .stat-row .stat-hint small { display: block; font: 500 .62rem var(--font); letter-spacing: .02em; text-transform: none; color: var(--muted); }
 .stat-row .stat-val { width: 2.4rem; text-align: right; color: var(--cyan); text-shadow: 0 0 8px var(--glow); }
 .stat-row .stat-bar { flex: 1; height: 5px; background: rgba(0, 0, 0, .55); border: 1px solid var(--line); }
 .stat-row .stat-bar i { display: block; height: 100%; background: linear-gradient(90deg, #1b56c8, var(--cyan)); box-shadow: 0 0 8px var(--glow); }
+
+/* ----- Daily quests ----- */
+.daily-window { margin-bottom: 1rem; border-color: var(--line-hi); }
+.daily-head { display: flex; justify-content: space-between; align-items: center; font: 700 .8rem var(--mono); letter-spacing: .12em; color: var(--muted); margin-bottom: .4rem; }
+.daily-count { color: var(--cyan); font-size: 1rem; text-shadow: 0 0 8px var(--glow); }
+.daily-list { margin-top: .8rem; }
+.task.daily { border-left-color: var(--cyan); }
+.task.daily .task-check:disabled { cursor: not-allowed; }
+.badge.locked { color: var(--green); border-color: var(--green); }
+.daily-warn { margin-top: .8rem; padding: .6rem .8rem; border: 1px solid var(--gold); background: rgba(245, 185, 66, .08); font-size: .85rem; }
+.daily-warn.bad { border-color: var(--red); background: rgba(255, 77, 109, .1); }
+.daily-foot { display: flex; justify-content: space-between; align-items: center; gap: .6rem; flex-wrap: wrap; margin-top: .8rem; font-size: .78rem; }
+.class-editor { margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+.class-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .6rem; }
+.class-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .3rem .25rem .6rem; border: 1px solid var(--line-hi); background: rgba(30, 90, 200, .25); font-size: .82rem; }
+.class-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: .8rem; padding: .1rem .3rem; }
+.class-del:hover { color: var(--red); }
+.class-form { display: flex; gap: .5rem; margin-bottom: .4rem; }
+.class-form input { flex: 1; }
+.rank-badge.penalty { color: var(--red); border-color: var(--red); }
 
 /* ----- Quest Board ----- */
 .task-form { display: grid; gap: .7rem; margin-bottom: 1rem; }

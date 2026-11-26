@@ -117,7 +117,10 @@ function renderHeader() {
   if (document.activeElement !== nameEl) nameEl.value = p.name;
   $('playerTitle').textContent = p.avatarTitle;
   $('playerLevel').textContent = 'LV ' + p.level;
-  $('playerRank').textContent = 'RANK ' + rankForLevel(p.level);
+  var pen = gameState.daily.rankPenalty > 0;
+  $('playerRank').textContent = 'RANK ' + displayRank() + (pen ? ' ▼' : '');
+  $('playerRank').classList.toggle('penalty', pen);
+  $('playerRank').title = pen ? 'Rank lowered by the daily-quest penalty' : '';
   $('xpFill').style.width = Math.min(100, (p.currentXP / p.xpToNextLevel) * 100) + '%';
   $('xpText').textContent = p.currentXP + ' / ' + p.xpToNextLevel + ' XP';
   $('goldValue').textContent = p.gold;
@@ -134,6 +137,7 @@ function setTab(name) {
 function renderAll() {
   renderHeader();
   renderStatus();
+  renderDaily();
   renderTasks();
   renderSanctuary();
   renderShop();

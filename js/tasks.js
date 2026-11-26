@@ -19,16 +19,33 @@ function addTask(title, category, difficulty) {
   commit();
 }
 
-// Adds (sign +1) or removes (sign -1) a quest's stat points: INT/STR/VIT by category.
+// Adds (sign +1) or removes (sign -1) a quest's share of a stat point (INT/STR/VIT by category).
+// 5 Easy / 3 Medium / 1 Hard = +1 point; progress carries over (see QUEST_STAT_UNITS in state.js).
+// Returns the change in whole points (e.g. +1 when this quest completed a point).
 function addQuestStat(task, sign) {
-  var q = gameState.stats.questPoints;
-  if (q[task.category] === undefined) return;
-  q[task.category] = Math.max(0, q[task.category] + sign * (QUEST_STAT_WEIGHT[task.difficulty] || 1));
+  if (task.daily) return 0;             // daily quests give +1 INT only once ALL of the day's set is done (js/daily.js)
+  var st = gameState.stats, cat = task.category, before;
+  if (st.questPoints[cat] === undefined) return 0;
+  before = st.questPoints[cat];
+  st.questUnits[cat] += sign * (QUEST_STAT_UNITS[task.difficulty] || QUEST_STAT_UNITS.Easy);
+  while (st.questUnits[cat] >= UNITS_PER_POINT) { st.questUnits[cat] -= UNITS_PER_POINT; st.questPoints[cat]++; }
+  while (st.questUnits[cat] < 0) {      // un-completing can take a point back
+    if (st.questPoints[cat] > 0) { st.questPoints[cat]--; st.questUnits[cat] += UNITS_PER_POINT; }
+    else st.questUnits[cat] = 0;
+  }
+  return st.questPoints[cat] - before;
+}
+// Which on-screen stat tag a category trains (INT / ETH / DIS).
+function statTagFor(category) {
+  var key = { Homework: 'INT', Work: 'STR', Personal: 'VIT' }[category];
+  var info = STAT_INFO.filter(function (s) { return s.key === key; })[0];
+  return info ? info.tag : '';
 }
 
 function toggleTask(id) {
   var t = gameState.tasks.filter(function (x) { return x.id === id; })[0];
   if (!t) return;
+  if (t.daily && t.completed) return;   // completed daily quests are locked (see js/daily.js)
   var reward = DIFFICULTY[t.difficulty] || DIFFICULTY.Easy;
 
   if (!t.completed) {
@@ -38,17 +55,17 @@ function toggleTask(id) {
     t.awardedXP = reward.xp;          // remembered so un-checking can reverse it exactly
     t.awardedGold = reward.gold;
     gameState.stats.totalTasksCompleted++;
-    addQuestStat(t, +1);
+    var statGain = addQuestStat(t, +1);
     var oldLevel = gameState.player.level;
     var levels = gainXP(reward.xp);
     changeGold(reward.gold);
     floatText('+' + reward.xp + ' XP', 'xp');
-    systemNotify({
-      title: 'Quest Complete',
-      lines: [esc(t.title), 'REWARD: <b>+' + reward.xp + ' XP</b> &nbsp; <b>+' + reward.gold + ' G</b>']
-    });
+    var lines = [esc(t.title), 'REWARD: <b>+' + reward.xp + ' XP</b> &nbsp; <b>+' + reward.gold + ' G</b>'];
+    if (statGain > 0) lines.push('STAT UP: <b>+' + statGain + ' ' + statTagFor(t.category) + '</b>');
+    systemNotify({ title: 'Quest Complete', lines: lines });
     playSound('system');
     setTimeout(function () { playSound('coin'); }, 250);
+    if (t.daily) onDailyCompleted();      // all 3 done: reset the inactive counter, lift any rank penalty
     commit();
     if (levels > 0) showLevelUp(gameState.player.level, oldLevel);
   } else {
@@ -74,11 +91,12 @@ function deleteTask(id) {
 
 function renderTasks() {
   var list = $('taskList');
-  var shown = gameState.tasks.filter(function (t) {
+  var own = gameState.tasks.filter(function (t) { return !t.daily; });   // daily quests live in their own window
+  var shown = own.filter(function (t) {
     return taskFilter === 'all' || (taskFilter === 'active' ? !t.completed : t.completed);
   });
   if (!shown.length) {
-    list.innerHTML = '<li class="empty">' + (gameState.tasks.length ? '[ No quests match this filter ]' : '[ No active quests. Accept a new quest above. ]') + '</li>';
+    list.innerHTML = '<li class="empty">' + (own.length ? '[ No quests match this filter ]' : '[ No active quests. Accept a new quest above. ]') + '</li>';
     return;
   }
   list.innerHTML = shown.map(function (t) {
@@ -102,12 +120,15 @@ function renderStatus() {
     '<h2>Status</h2><div class="status-grid">' +
     '<div class="status-id"><div class="status-name">' + esc(p.name) + '</div>' +
     '<div class="status-level"><small>LEVEL</small>' + p.level + '</div>' +
-    '<span class="title-badge">' + esc(p.avatarTitle) + '</span> <span class="rank-badge">RANK ' + rankForLevel(p.level) + '</span></div>' +
+    '<span class="title-badge">' + esc(p.avatarTitle) + '</span> <span class="rank-badge' + (gameState.daily.rankPenalty ? ' penalty' : '') + '">RANK ' + displayRank() + (gameState.daily.rankPenalty ? ' ▼' : '') + '</span></div>' +
     '<div class="stat-list">' + STAT_INFO.map(function (info) {
       var v = stats[info.key];
+      // Quest stats also show progress toward their next point.
+      var cat = { INT: 'Homework', STR: 'Work', VIT: 'Personal' }[info.key];
+      var next = cat ? ' · next point ' + Math.round(gameState.stats.questUnits[cat] / UNITS_PER_POINT * 100) + '%' : '';
       return '<div class="stat-row"><span class="stat-name">' + esc(info.tag) + '</span><span class="stat-val">' + v +
              '</span><span class="stat-bar"><i style="width:' + Math.min(100, v / cap * 100) + '%"></i></span>' +
-             '<span class="stat-hint">' + esc(info.name) + '<small>' + esc(info.source) + '</small></span></div>';
+             '<span class="stat-hint">' + esc(info.name) + '<small>' + esc(info.source) + next + '</small></span></div>';
     }).join('') + '</div></div>';
 }
 

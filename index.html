@@ -48,6 +48,9 @@
       <!-- Status window: rendered by renderStatus() in tasks.js -->
       <div id="statusWindow" class="card status-window"></div>
 
+      <!-- Daily quests: rendered by renderDaily() in daily.js -->
+      <div id="dailyWindow" class="card daily-window"></div>
+
       <form id="taskForm" class="card task-form" autocomplete="off">
         <h2>Accept New Quest</h2>
         <input id="taskTitle" type="text" maxlength="100" placeholder="What do you need to do?" required aria-label="Task name">
@@ -62,9 +65,9 @@
           </label>
           <label>Difficulty
             <select id="taskDifficulty">
-              <option value="Easy">Easy: +25 XP | +15 Gold</option>
-              <option value="Medium" selected>Medium: +50 XP | +35 Gold</option>
-              <option value="Hard">Hard: +100 XP | +75 Gold</option>
+              <option value="Easy">Easy: +25 XP | +15 Gold | 1/5 stat point</option>
+              <option value="Medium" selected>Medium: +50 XP | +35 Gold | 1/3 stat point</option>
+              <option value="Hard">Hard: +100 XP | +75 Gold | +1 stat point</option>
             </select>
           </label>
         </div>
@@ -145,6 +148,7 @@
   <script src="js/ui.js"></script>
   <script src="js/dragon.js"></script>
   <script src="js/tasks.js"></script>
+  <script src="js/daily.js"></script>
   <script src="js/timer.js"></script>
   <script src="js/shop.js"></script>
   <script src="js/hall.js"></script>

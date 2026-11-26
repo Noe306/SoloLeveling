@@ -6,7 +6,9 @@ initUI();
 initTasks();
 initTimer();
 initShop();
+initDaily();
 renderAll();
+runDailyCheck();       // new day? judge yesterday, apply any penalty, create today's 3 daily quests
 
 // Another browser tab changed the save: adopt it so tabs never overwrite each other.
 window.addEventListener('storage', function (e) {
