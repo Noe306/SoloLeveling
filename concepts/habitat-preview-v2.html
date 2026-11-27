@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Habitat Preview v2</title>
+<style>
+  /* Ice Habitat rebuilt with the detailed toolkit (concepts/lib/kit3d.js). Same camera as v1 for comparison. */
+  :root { --panel: rgba(6,16,38,.88); --line-hi: #4aa3ff; --text: #d6e8ff; --muted: #7f9bc4; --cyan: #6be6ff; --glow: rgba(74,163,255,.45); }
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: "Bahnschrift", "Segoe UI", system-ui, sans-serif; color: var(--text); background: #6fb6ea; }
+  canvas { display: block; touch-action: none; }
+  .win { position: fixed; background: var(--panel); border: 1px solid var(--line-hi); box-shadow: 0 0 16px var(--glow); }
+  .title { top: 12px; left: 50%; transform: translateX(-50%); padding: .5rem 1rem; text-align: center; }
+  .title b { display: block; color: var(--cyan); letter-spacing: .2em; text-transform: uppercase; text-shadow: 0 0 10px var(--glow); }
+  .title small { color: var(--muted); letter-spacing: .08em; }
+  .tag { position: fixed; padding: .3rem .7rem; font-weight: 800; letter-spacing: .2em; color: #fff; background: var(--panel); border: 1px solid var(--line-hi); transform: translate(-50%, 0); pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="win title"><b>Ice Habitat · v2 (detailed)</b><small>Level 1 → Level 2 · drag to turn · scroll to zoom</small></div>
+<div class="tag" id="tag1">LEVEL 1</div>
+<div class="tag" id="tag2">LEVEL 2</div>
+
+<script src="../vendor/three/three.min.js"></script>
+<script src="../vendor/three/OrbitControls.js"></script>
+<script>
+  // Load the toolkit's add-ons in order (classic scripts, works from file:// and the website).
+  KIT3D_LIST = ['extras/math/SimplexNoise.js', 'extras/utils/BufferGeometryUtils.js', 'extras/geometries/RoundedBoxGeometry.js',
+    'extras/environments/RoomEnvironment.js', 'extras/shaders/CopyShader.js', 'extras/shaders/LuminosityHighPassShader.js',
+    'extras/shaders/SSAOShader.js', 'extras/shaders/GammaCorrectionShader.js', 'extras/shaders/FXAAShader.js',
+    'extras/postprocessing/EffectComposer.js', 'extras/postprocessing/RenderPass.js', 'extras/postprocessing/ShaderPass.js',
+    'extras/postprocessing/MaskPass.js', 'extras/postprocessing/UnrealBloomPass.js', 'extras/postprocessing/SSAOPass.js'];
+  KIT3D_LIST.forEach(function (f) { document.write('<script src="../vendor/three/' + f + '"><\/script>'); });
+</script>
+<script src="lib/kit3d.js"></script>
+<script>
+/* ============================ Scene setup ============================ */
+var scene = new THREE.Scene();
+scene.background = (function () {
+  var c = document.createElement('canvas'); c.width = 4; c.height = 512;
+  var x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0, '#2a74c4'); g.addColorStop(0.5, '#7fc0ee'); g.addColorStop(1, '#e8f5ff');
+  x.fillStyle = g; x.fillRect(0, 0, 4, 512); var t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+})();
+var camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.3, 80);
+camera.position.set(8.5, 8.2, 8.5);
+var R3 = K3.createRenderer(scene, camera, { ao: true, aoRadius: 0.35, aoMax: 0.015, bloom: 0.22, bloomThreshold: 0.93, exposure: 0.82 });
+document.body.prepend(R3.renderer.domElement);
+var controls = new THREE.OrbitControls(camera, R3.renderer.domElement);
+controls.target.set(0, 0.7, 0); controls.enableDamping = true; controls.enablePan = false;
+controls.minDistance = 5; controls.maxDistance = 20; controls.maxPolarAngle = 1.3;
+controls.autoRotate = /spin/.test(location.search); controls.autoRotateSpeed = 0.6;
+K3.lights(scene, 5);
+var col = K3.col, R = K3.rng(7);
+
+/* ============================ Materials (shared) ============================ */
+var M = {
+  snow: K3.mat('snow', { repeat: 2, normalScale: 0.8, color: '#d9e6f2' }),
+  stone: K3.mat('stone', { vertexColors: true, flat: true, repeat: 1, color: '#a9b9c6' }),
+  ice: K3.mat('ice', { repeat: 1.5, roughness: 0.25, normalScale: 0.5 }),
+  deepIce: new THREE.MeshPhysicalMaterial({ color: col('#1d6fb3'), emissive: col('#0d4f8f'), emissiveIntensity: 0.6, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.5 }),
+  rune: K3.mat('glow', { color: '#8ff0ff', intensity: 3 }),
+  bark: K3.mat('bark', { repeat: 1 }),
+  pine: new THREE.MeshStandardMaterial({ color: col('#2e5e45'), roughness: 0.9, flatShading: true }),
+  grassTop: K3.mat('grass', { repeat: 1 }),
+  dirt: K3.mat('dirt', { repeat: 2, color: '#b9a28a' })
+};
+
+/* ============================ Building blocks ============================ */
+// Snow-capped floating rock: the habitat's base (rocky underside + smooth snow top).
+function snowPlateau(radius) {
+  var g = new THREE.Group();
+  var under = K3.rock({ radius: radius, detail: 4, seed: 11, squash: 0.42, lumpy: 0.22, color: '#c6d6e2', top: '#ffffff', topAmount: 0.35, material: M.stone });
+  under.scale.set(1, 0.9, 1); under.position.y = 0.05; g.add(under);
+  var cap = K3.rock({ radius: radius * 1.02, detail: 4, seed: 3, squash: 0.08, lumpy: 0.08, flat: false, material: M.snow });
+  cap.position.y = 0.44; g.add(cap);
+  return g;
+}
+// Stylised frosted pine built from stacked cones with snow on each tier.
+function frostPine(h) {
+  var g = new THREE.Group();
+  var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.05 * h, 0.08 * h, 0.35 * h, 7), M.bark); trunk.position.y = 0.17 * h; trunk.castShadow = true; g.add(trunk);
+  for (var i = 0; i < 4; i++) {
+    var r = (0.42 - i * 0.09) * h, y = (0.3 + i * 0.22) * h;
+    var tier = new THREE.Mesh(new THREE.ConeGeometry(r, 0.36 * h, 8), M.pine); tier.position.y = y + 0.18 * h; tier.castShadow = tier.receiveShadow = true; g.add(tier);
+    var snow = new THREE.Mesh(new THREE.ConeGeometry(r * 0.78, 0.16 * h, 8), M.snow); snow.position.y = y + 0.3 * h; snow.castShadow = true; g.add(snow);
+  }
+  return g;
+}
+// Frozen pool: glassy deep-blue centre, icy rim, optional glowing rune ring.
+function frozenPool(radius, runes) {
+  var g = new THREE.Group();
+  var rim = new THREE.Mesh(new THREE.CylinderGeometry(radius * 1.08, radius * 1.12, 0.06, 40), M.ice); rim.receiveShadow = true; g.add(rim);
+  var deep = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.82, radius * 0.82, 0.065, 40), M.deepIce); deep.position.y = 0.002; g.add(deep);
+  for (var i = 0; i < 14; i++) {                                        // snow lumps around the edge
+    var a = i / 14 * Math.PI * 2 + R() * 0.2, l = K3.rock({ radius: 0.09 + R() * 0.07, detail: 2, seed: 40 + i, squash: 0.5, flat: false, material: M.snow });
+    l.position.set(Math.cos(a) * radius * 1.13, 0.02, Math.sin(a) * radius * 1.13); g.add(l);
+  }
+  if (runes) {
+    var ring = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.95, 0.018, 8, 72), M.rune); ring.rotation.x = Math.PI / 2; ring.position.y = 0.045; g.add(ring);
+    for (var r = 0; r < 8; r++) {
+      var ra = r / 8 * Math.PI * 2, rune = new THREE.Mesh(new THREE.OctahedronGeometry(0.035, 0), M.rune);
+      rune.position.set(Math.cos(ra) * radius * 0.95, 0.07, Math.sin(ra) * radius * 0.95); g.add(rune);
+    }
+    for (var f = 0; f < 4; f++) {                                       // drifting ice floes
+      var floe = new THREE.Mesh(new THREE.CylinderGeometry(0.08 + R() * 0.06, 0.09, 0.03, 6), M.snow);
+      floe.position.set((R() - 0.5) * radius, 0.05, (R() - 0.5) * radius); floe.rotation.y = R() * 3; g.add(floe);
+    }
+  }
+  return g;
+}
+
+/* ============================ ICE HABITAT (level 1 / level 2) ============================ */
+function iceHabitat(level) {
+  var g = new THREE.Group();
+  g.add(snowPlateau(1.38));
+  var top = 0.55;                                                       // height of the snow surface
+  var pool = frozenPool(level >= 2 ? 0.62 : 0.45, level >= 2); pool.position.set(0.28, top, 0.28); g.add(pool);
+
+  // Level 1: a young crystal cluster and two snowy rocks
+  var young = K3.crystalCluster({ count: 4, height: 0.75, radius: 0.12, seed: 5, spread: 0.18 });
+  young.position.set(-0.55, top - 0.02, -0.5); g.add(young);
+  [[0.8, -0.55, 0.22, 1], [-0.7, 0.72, 0.18, 2]].forEach(function (p) {
+    var rk = K3.rock({ radius: p[2], detail: 3, seed: 60 + p[3], squash: 0.7, color: '#b8c8d6', top: '#ffffff', topAmount: 0.5, material: M.stone });
+    rk.position.set(p[0], top + 0.02, p[1]); g.add(rk);
+  });
+
+  if (level >= 2) {
+    // Rocky outcrop at the back carrying a tall crystal spire
+    var outcrop = K3.rock({ radius: 0.48, detail: 4, seed: 77, squash: 0.85, lumpy: 0.3, color: '#aebfcd', top: '#ffffff', topAmount: 0.4, material: M.stone });
+    outcrop.position.set(-0.62, top + 0.12, -0.58); g.add(outcrop);
+    var spire = K3.crystalCluster({ count: 7, height: 2.1, radius: 0.2, seed: 12, spread: 0.3, intensity: 0.45 });
+    spire.position.set(-0.62, top + 0.42, -0.58); g.add(spire);
+    // Small crystals along the rim
+    [[0.95, 0.5], [1.05, 0.0], [0.4, 1.02], [-0.25, 1.0]].forEach(function (c, i) {
+      var cc = K3.crystalCluster({ count: 3, height: 0.45, radius: 0.07, seed: 30 + i, spread: 0.08 }); cc.position.set(c[0], top - 0.02, c[1]); g.add(cc);
+    });
+    // Frosted pines
+    var p1 = frostPine(1.25); p1.position.set(0.95, top - 0.03, -0.75); g.add(p1);
+    var p2 = frostPine(0.95); p2.position.set(-1.0, top - 0.03, 0.4); g.add(p2);
+    // Icicles hanging under the rim (front)
+    for (var k = 0; k < 16; k++) {
+      var ka = -0.45 + k / 15 * 2.3, len = 0.16 + R() * 0.34;
+      var ic = new THREE.Mesh(new THREE.ConeGeometry(0.04, len, 6), K3.mat('crystal', { intensity: 0.2 }));
+      ic.position.set(Math.cos(ka) * 1.33, 0.22 - len / 2, Math.sin(ka) * 1.33); ic.rotation.x = Math.PI; g.add(ic);
+    }
+    // Floating shards orbiting above the pool
+    var shards = new THREE.Group(); shards.position.set(0.28, 1.35, 0.28); g.add(shards);
+    for (var s = 0; s < 5; s++) {
+      var sh = K3.crystal({ height: 0.16, radius: 0.045, core: false, intensity: 0.6 });
+      sh.position.set(Math.cos(s * 1.26) * 0.5, Math.sin(s * 2) * 0.08, Math.sin(s * 1.26) * 0.5); sh.rotation.z = 0.4; shards.add(sh);
+    }
+    K3.anims.push(function (t) { shards.rotation.y = t * 0.7; shards.position.y = 1.35 + Math.sin(t * 1.4) * 0.06; });
+    // Snow sparkles rising
+    var N = 70, pos = new Float32Array(N * 3);
+    for (var p = 0; p < N; p++) { pos[p * 3] = 0.28 + (R() - 0.5) * 1.6; pos[p * 3 + 1] = top + R() * 2; pos[p * 3 + 2] = 0.28 + (R() - 0.5) * 1.6; }
+    var pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.add(new THREE.Points(pg, new THREE.PointsMaterial({ color: col('#ffffff'), size: 0.045, transparent: true, opacity: 0.95 })));
+    K3.anims.push(function (t, dt) { for (var q = 0; q < N; q++) { pos[q * 3 + 1] += dt * 0.22; if (pos[q * 3 + 1] > top + 2.2) pos[q * 3 + 1] = top; } pg.attributes.position.needsUpdate = true; });
+    var light = new THREE.PointLight(col('#8fe3ff'), 2.2, 4.5, 2); light.position.set(-0.5, 1.7, -0.5); g.add(light);
+  }
+  return g;
+}
+
+/* ============================ Two 3x3 plots with real grass ============================ */
+function plot(x) {
+  var g = new THREE.Group(); g.position.x = x; scene.add(g);
+  var soil = K3.roundedBox(3, 0.55, 3, 0.06, M.dirt); soil.position.y = -0.3; g.add(soil);
+  var turf = K3.roundedBox(3.02, 0.08, 3.02, 0.03, M.grassTop); turf.position.y = -0.02; g.add(turf);
+  g.add(K3.grass({ count: 5200, width: 2.95, depth: 2.95, height: 0.22, y: 0.02, seed: 50 + x,
+    area: function (px, pz) { return Math.hypot(px, pz) > 1.3; } }));     // around the habitat, not under it
+  return g;
+}
+var tags = [];
+[[-2, 1], [2, 2]].forEach(function (d) {
+  var p = plot(d[0]); p.add(iceHabitat(d[1]));
+  tags.push({ el: document.getElementById('tag' + d[1]), pos: new THREE.Vector3(d[0], -0.6, 1.7) });
+});
+
+var clock = new THREE.Clock();
+(function loop() {
+  var dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime;
+  controls.update();
+  K3.anims.forEach(function (fn) { fn(t, dt); });
+  tags.forEach(function (tg) { var v = tg.pos.clone().project(camera); tg.el.style.left = ((v.x + 1) / 2 * innerWidth) + 'px'; tg.el.style.top = ((1 - v.y) / 2 * innerHeight) + 'px'; });
+  R3.render();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
