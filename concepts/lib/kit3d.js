@@ -93,6 +93,15 @@ var K3 = (function () {
       ao = new THREE.SSAOPass(scene, camera, innerWidth, innerHeight);
       ao.kernelRadius = opts.aoRadius || 0.6;        // world units: how far creases darken
       ao.minDistance = 0.0005; ao.maxDistance = opts.aoMax || 0.02;
+      // Sprites (flames, smoke) and particles are see-through: drawn as solid quads in the AO
+      // normal/depth pass they leave grey rectangles. Hide them for that pass only.
+      var baseOverride = ao.renderOverride.bind(ao);
+      ao.renderOverride = function (r, mat, target, clearColor, clearAlpha) {
+        var hidden = [];
+        scene.traverse(function (o) { if (o.visible && (o.isSprite || o.isPoints || (o.userData && o.userData.noAO))) { o.visible = false; hidden.push(o); } });
+        baseOverride(r, mat, target, clearColor, clearAlpha);
+        hidden.forEach(function (o) { o.visible = true; });
+      };
       composer.addPass(ao);
     }
     var bloom = null;
@@ -406,7 +415,7 @@ var K3 = (function () {
     return root;
   }
 
-  return { col: col, rng: rng, fbm3: fbm3, anims: anims, prepareModel: prepareModel, createRenderer: createRenderer, lights: lights,
+  return { col: col, rng: rng, fbm3: fbm3, tile4: tile4, anims: anims, prepareModel: prepareModel, createRenderer: createRenderer, lights: lights,
            tex: tex, mat: mat, rock: rock, crystal: crystal, crystalCluster: crystalCluster, roundedBox: roundedBox,
            tube: tube, chain: chain, scatter: scatter, grass: grass };
 })();

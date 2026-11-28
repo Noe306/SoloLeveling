@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Habitat Gallery</title>
+<!--
+  Habitat Gallery: one viewer for every element habitat and level.
+
+  HOW IT FITS TOGETHER
+    habitats/registry.js   the 16 elements (unlock level, Town Hall) + HABITATS.register()
+    habitats/<id>.js       one file per habitat, registers build(level, ctx)
+    this page              renderer, lights, the 3x3 grass plot, cameras, UI
+
+  ADD A NEW HABITAT
+    1. create habitats/<id>.js (copy the pattern of habitats/ice.js)
+    2. add its id to HABITAT_FILES below
+
+  URL OPTIONS (shareable, used for screenshots)
+    ?el=ice          element to show
+    &lv=2            level (1-5), or lv=all to compare every designed level side by side
+    &cam=village     fixed game camera (zoom + pan only); default "free" (turn around it)
+    &spot=0          hide the dragon resting-spot marker
+    &ui=0            hide all panels (clean screenshots)
+    &spin            slowly turn the camera (free camera only)
+-->
+<style>
+  :root {
+    --void: #050a16; --panel: rgba(6, 16, 38, .86); --line: rgba(74, 163, 255, .45); --line-hi: #4aa3ff;
+    --text: #d6e8ff; --muted: #7f9bc4; --cyan: #6be6ff; --glow: rgba(74, 163, 255, .45); --gold: #ffc24a;
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: "Bahnschrift", "Segoe UI", system-ui, sans-serif; color: var(--text); background: #6fb6ea; }
+  canvas { display: block; touch-action: none; }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- System-style window with corner brackets ---------- */
+  .win { position: fixed; z-index: 2; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 0 16px var(--glow), inset 0 0 18px rgba(74,163,255,.12); }
+  .win::before, .win::after { content: ""; position: absolute; width: 12px; height: 12px; border: 2px solid var(--cyan); pointer-events: none; }
+  .win::before { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+  .win::after { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
+  .win h2 { margin: 0 0 .35rem; font-size: .72rem; letter-spacing: .28em; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+
+  /* ---------- Info window (top left) ---------- */
+  #info { top: 12px; left: 12px; padding: .7rem 1rem; max-width: 340px; }
+  #info .el { font-size: 1.25rem; font-weight: 800; letter-spacing: .22em; text-transform: uppercase; text-shadow: 0 0 10px var(--glow); }
+  #info .meta { margin-top: .25rem; font-size: .82rem; color: var(--muted); line-height: 1.45; }
+  #info .meta b { color: var(--text); font-weight: 600; }
+  #info .idea { margin-top: .35rem; font-size: .78rem; color: var(--muted); font-style: italic; }
+
+  /* ---------- Element picker (right side on desktop) ---------- */
+  #elements { top: 12px; right: 12px; padding: .7rem; width: 268px; }
+  #elements .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .chip { position: relative; padding: .42rem .1rem .32rem; background: rgba(74,163,255,.07); border: 1px solid var(--line); cursor: pointer; font-size: .68rem; letter-spacing: .04em; text-align: center; }
+  .chip .n { display: block; font-size: .6rem; color: var(--muted); }
+  .chip .dot { display: block; width: 9px; height: 9px; margin: 0 auto .2rem; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
+  .chip:hover:not(:disabled) { border-color: var(--line-hi); background: rgba(74,163,255,.16); }
+  .chip.on { border-color: var(--cyan); background: rgba(107,230,255,.18); box-shadow: 0 0 10px var(--glow); }
+  .chip:disabled { opacity: .32; cursor: default; }
+  #elements .legend { margin-top: .45rem; font-size: .68rem; color: var(--muted); }
+
+  /* ---------- Bottom bar: levels, camera, options ---------- */
+  #bar { bottom: 12px; left: 50%; transform: translateX(-50%); padding: .5rem .6rem; display: flex; gap: .9rem; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .group { display: flex; gap: 4px; align-items: center; }
+  .group > span { font-size: .66rem; letter-spacing: .22em; color: var(--muted); margin-right: .25rem; text-transform: uppercase; }
+  .btn { min-width: 38px; padding: .45rem .6rem; background: rgba(74,163,255,.08); border: 1px solid var(--line); cursor: pointer; font-size: .78rem; font-weight: 700; letter-spacing: .1em; }
+  .btn:hover:not(:disabled) { border-color: var(--line-hi); }
+  .btn.on { border-color: var(--cyan); background: rgba(107,230,255,.2); color: #fff; box-shadow: 0 0 10px var(--glow); }
+  .btn:disabled { opacity: .3; cursor: default; }
+  .btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  /* ---------- Level tags under each plot ---------- */
+  .tag { position: fixed; z-index: 1; padding: .25rem .65rem; font-size: .74rem; font-weight: 800; letter-spacing: .2em; color: #fff; background: var(--panel); border: 1px solid var(--line-hi); transform: translate(-50%, 0); pointer-events: none; white-space: nowrap; }
+  .tag small { font-weight: 500; letter-spacing: .08em; color: var(--muted); }
+
+  #hint { position: fixed; z-index: 1; bottom: 76px; left: 50%; transform: translateX(-50%); font-size: .72rem; color: rgba(255,255,255,.85); text-shadow: 0 1px 3px rgba(0,0,0,.6); pointer-events: none; white-space: nowrap; }
+
+  body.noui .win, body.noui #hint, body.noui .tag { display: none !important; }
+
+  /* ---------- Phone layout: picker becomes a scrolling strip ---------- */
+  @media (max-width: 760px) {
+    #info { max-width: none; right: 12px; padding: .5rem .8rem; }
+    #info .idea { display: none; }
+    #elements { top: auto; bottom: 118px; left: 12px; right: 12px; width: auto; padding: .45rem; }
+    #elements h2, #elements .legend { display: none; }
+    #elements .grid { display: flex; overflow-x: auto; gap: 5px; scrollbar-width: none; }
+    .chip { flex: 0 0 62px; }
+    #bar { left: 12px; right: 12px; transform: none; gap: .45rem; padding: .45rem; }
+    .group > span { display: none; }                 /* labels dropped: buttons speak for themselves */
+    .btn { min-width: 0; padding: .45rem .5rem; font-size: .74rem; }
+    #hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="win" id="info">
+  <h2>Habitat Gallery</h2>
+  <div class="el" id="elName"></div>
+  <div class="meta" id="elMeta"></div>
+  <div class="idea" id="elIdea"></div>
+</div>
+
+<div class="win" id="elements">
+  <h2>Elements</h2>
+  <div class="grid" id="elGrid"></div>
+  <div class="legend">Greyed out: habitat not designed yet</div>
+</div>
+
+<div class="win" id="bar">
+  <div class="group" id="lvGroup"><span>Level</span></div>
+  <div class="group" id="camGroup"><span>Camera</span>
+    <button class="btn" data-cam="free" title="Turn around the habitat">Free</button>
+    <button class="btn" data-cam="village" title="Fixed game angle: zoom and pan only">Village</button>
+  </div>
+  <div class="group"><button class="btn" id="spotBtn" title="Show where the grown dragon will rest">Dragon spot</button></div>
+</div>
+<div id="hint"></div>
+
+<script src="../vendor/three/three.min.js"></script>
+<script src="../vendor/three/OrbitControls.js"></script>
+<script>
+  // Toolkit add-ons (classic scripts so the page works from file:// and on the website).
+  ['extras/math/SimplexNoise.js', 'extras/utils/BufferGeometryUtils.js', 'extras/geometries/RoundedBoxGeometry.js',
+   'extras/environments/RoomEnvironment.js', 'extras/shaders/CopyShader.js', 'extras/shaders/LuminosityHighPassShader.js',
+   'extras/shaders/SSAOShader.js', 'extras/shaders/GammaCorrectionShader.js', 'extras/shaders/FXAAShader.js',
+   'extras/postprocessing/EffectComposer.js', 'extras/postprocessing/RenderPass.js', 'extras/postprocessing/ShaderPass.js',
+   'extras/postprocessing/MaskPass.js', 'extras/postprocessing/UnrealBloomPass.js', 'extras/postprocessing/SSAOPass.js'
+  ].forEach(function (f) { document.write('<script src="../vendor/three/' + f + '"><\/script>'); });
+</script>
+<script src="lib/kit3d.js"></script>
+<script src="habitats/registry.js"></script>
+<script>
+  // Every designed habitat file. Add the id here when a new habitats/<id>.js is created.
+  var HABITAT_FILES = ['fire', 'water', 'earth', 'forest', 'ice', 'electric', 'wind', 'metal', 'light', 'dark', 'poison', 'crystal', 'storm', 'spirit', 'time', 'cosmic'];
+  HABITAT_FILES.forEach(function (id) { document.write('<script src="habitats/' + id + '.js"><\/script>'); });
+</script>
+<script>
+(function () {
+'use strict';
+
+/* ============================ Settings ============================ */
+var PLOT = 3;              // plot size (3x3), same footprint every habitat gets in the village
+var SPACING = 4.3;         // distance between plots in "all levels" view (diagonal row, no overlap)
+var VIEW_DIR = new THREE.Vector3(1, 1.35, 1).normalize();   // village camera direction (same as village-3d.html)
+var FREE_DIR = new THREE.Vector3(8.5, 8.2, 8.5).normalize(); // free camera start (same as habitat-preview-v2)
+var ROW_DIR = new THREE.Vector3(1, 0, -1).normalize();        // plots line up left-to-right on screen
+
+/* ============================ View state (mirrored in the URL) ============================ */
+var q = new URLSearchParams(location.search);
+var view = {
+  el: q.get('el') || 'ice',
+  lv: q.get('lv') || '1',            // '1'..'5' or 'all'
+  cam: q.get('cam') === 'village' ? 'village' : 'free',
+  spot: q.get('spot') !== '0'
+};
+if (q.get('ui') === '0') document.body.classList.add('noui');
+if (!HABITATS.has(view.el)) view.el = (HABITAT_ELEMENTS.filter(function (e) { return HABITATS.has(e.id); })[0] || {}).id;
+
+/* ============================ Scene, renderer, lights ============================ */
+var scene = new THREE.Scene();
+scene.background = (function () {   // vertical sky gradient
+  var c = document.createElement('canvas'); c.width = 4; c.height = 512;
+  var x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0, '#2a74c4'); g.addColorStop(0.5, '#7fc0ee'); g.addColorStop(1, '#e8f5ff');
+  x.fillStyle = g; x.fillRect(0, 0, 4, 512); var t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+})();
+var camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.3, 200);
+// Close-up settings tested in docs/3d-design-guide.md (habitat ~12-15 units away).
+var R3 = K3.createRenderer(scene, camera, { ao: true, aoRadius: 0.35, aoMax: 0.015, bloom: 0.22, bloomThreshold: 0.93, exposure: 0.82 });
+document.body.prepend(R3.renderer.domElement);
+var controls = new THREE.OrbitControls(camera, R3.renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.12;
+var LIGHTS = K3.lights(scene, 5);
+
+// Resize the sun's shadow box to cover the whole row of plots (sharp shadows everywhere).
+function fitShadows(halfWidth) {
+  var a = Math.max(5, halfWidth + 2), sun = LIGHTS.sun;
+  sun.position.set(-a * 0.9, a * 1.8, a * 0.7);
+  Object.assign(sun.shadow.camera, { left: -a, right: a, top: a, bottom: -a, near: 0.5, far: a * 6 });
+  sun.shadow.camera.updateProjectionMatrix();
+}
+
+/* ============================ Shared ground materials ============================ */
+var GROUND = {
+  dirt: K3.mat('dirt', { repeat: 2, color: '#b9a28a' }),
+  turf: K3.mat('grass', { repeat: 1 }),
+  // The spot marker is an overlay: drawn on top of everything (depthTest off) so props can't hide it.
+  spot: new THREE.MeshBasicMaterial({ color: K3.col('#6be6ff'), transparent: true, opacity: 0.85, depthWrite: false, depthTest: false }),
+  spotFill: new THREE.MeshBasicMaterial({ color: K3.col('#6be6ff'), transparent: true, opacity: 0.16, depthWrite: false, depthTest: false })
+};
+
+/* ============================ Stage (rebuilt on every view change) ============================ */
+var stage = null, tags = [], spotMarkers = [];
+var baseAnims = K3.anims.length;        // anything added after this belongs to the current stage
+var tagLayer = document.body;
+
+// 3x3 plot: soil block + turf + dense grass around (not under) the habitat.
+function plot(footprint, seed) {
+  var g = new THREE.Group();
+  var soil = K3.roundedBox(PLOT, 0.55, PLOT, 0.06, GROUND.dirt); soil.position.y = -0.3; g.add(soil);
+  var turf = K3.roundedBox(PLOT + 0.02, 0.08, PLOT + 0.02, 0.03, GROUND.turf); turf.position.y = -0.02; g.add(turf);
+  g.add(K3.grass({ count: 5200, width: PLOT - 0.05, depth: PLOT - 0.05, height: 0.22, y: 0.02, seed: seed,
+    area: function (px, pz) { return Math.hypot(px, pz) > footprint; } }));
+  return g;
+}
+
+// Faint dashed ring showing where the grown dragon will rest (rule: no eggs, centre stays free).
+function spotMarker(s) {
+  var g = new THREE.Group(), dashes = 16;
+  for (var i = 0; i < dashes; i++) {
+    var seg = new THREE.Mesh(new THREE.RingGeometry(s.r - 0.05, s.r, 6, 1, i / dashes * Math.PI * 2, Math.PI * 2 / dashes * 0.6), GROUND.spot);
+    seg.rotation.x = -Math.PI / 2; seg.renderOrder = 10; g.add(seg);
+  }
+  var fill = new THREE.Mesh(new THREE.CircleGeometry(s.r - 0.05, 40), GROUND.spotFill); fill.rotation.x = -Math.PI / 2; fill.renderOrder = 9; g.add(fill);
+  g.position.set(s.x, s.y + 0.01, s.z);
+  return g;
+}
+
+// Free GPU memory of the previous stage (textures are cached by K3 and kept).
+function disposeStage() {
+  if (!stage) return;
+  stage.traverse(function (o) {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material && !Object.values(GROUND).includes(o.material)) [].concat(o.material).forEach(function (m) { m.dispose(); });
+  });
+  scene.remove(stage); stage = null;
+  tags.forEach(function (t) { t.el.remove(); }); tags = []; spotMarkers = [];
+}
+
+function levelsToShow(def) {
+  if (view.lv === 'all') { var a = []; for (var i = 1; i <= def.levels; i++) a.push(i); return a; }
+  return [Math.min(def.levels, Math.max(1, parseInt(view.lv, 10) || 1))];
+}
+
+function rebuild() {
+  disposeStage();
+  K3.anims.length = baseAnims;                        // drop the old stage's animations
+  var def = HABITATS.get(view.el);
+  if (!def) return;
+  stage = new THREE.Group(); scene.add(stage);
+  var ctx = {
+    rng: function (seed) { return K3.rng(seed); },
+    anim: function (fn) { K3.anims.push(fn); }
+  };
+  var lvls = levelsToShow(def), n = lvls.length;
+  lvls.forEach(function (lv, i) {
+    var off = ROW_DIR.clone().multiplyScalar((i - (n - 1) / 2) * SPACING);
+    var p = plot(def.footprint, 50 + lv); p.position.copy(off); stage.add(p);
+    p.add(def.build(lv, ctx));
+    if (def.dragonSpot) { var m = spotMarker(def.dragonSpot); m.visible = view.spot; p.add(m); spotMarkers.push(m); }
+    // Level tag below the front corner of the plot
+    var el = document.createElement('div'); el.className = 'tag';
+    el.innerHTML = 'LEVEL ' + lv + ' <small>· ' + lv + (lv === 1 ? ' dragon' : ' dragons') + '</small>';
+    tagLayer.appendChild(el);
+    tags.push({ el: el, pos: off.clone().add(new THREE.Vector3(PLOT / 2, -0.55, PLOT / 2)) });   // front corner, under the soil
+  });
+  fitShadows((n - 1) / 2 * SPACING + PLOT / 2);
+  fitCamera(n);
+}
+
+/* ============================ Cameras ============================ */
+// Distance that fits a row of n plots horizontally (and one plot vertically) on screen.
+function fitDistance(n) {
+  var vf = THREE.MathUtils.degToRad(camera.fov), hf = 2 * Math.atan(Math.tan(vf / 2) * camera.aspect);
+  var width = (n - 1) * SPACING + PLOT * 1.6, height = 6.6;   // tallest focal piece + room for the tags and bottom bar
+  return Math.max(height / (2 * Math.tan(vf / 2)), width / (2 * Math.tan(hf / 2))) * 1.15;
+}
+
+function fitCamera(n) {
+  // Aim between the soil bottom and the top of the tallest piece (Ice spire ~3.1 high).
+  var d = fitDistance(n), target = new THREE.Vector3(0, 0.6, 0);
+  controls.target.copy(target);
+  if (view.cam === 'village') {
+    camera.position.copy(target).add(VIEW_DIR.clone().multiplyScalar(d));
+    controls.enableRotate = false; controls.enablePan = true; controls.screenSpacePanning = false;
+    controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+    controls.minPolarAngle = controls.maxPolarAngle = Math.acos(VIEW_DIR.y);   // angle locked
+    controls.autoRotate = false;
+  } else {
+    camera.position.copy(target).add(FREE_DIR.clone().multiplyScalar(d));
+    controls.enableRotate = true; controls.enablePan = false;
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+    controls.minPolarAngle = 0; controls.maxPolarAngle = 1.3;
+    controls.autoRotate = q.has('spin'); controls.autoRotateSpeed = 0.6;
+  }
+  controls.minDistance = Math.min(5, d * 0.5); controls.maxDistance = d * 1.8;
+  controls.update();
+  document.getElementById('hint').textContent = view.cam === 'village'
+    ? 'Village camera: drag to pan · scroll / pinch to zoom'
+    : 'Free camera: drag to turn · scroll / pinch to zoom';
+}
+addEventListener('resize', function () { var def = HABITATS.get(view.el); if (def) fitCamera(levelsToShow(def).length); });
+
+/* ============================ UI ============================ */
+function syncUrl() {
+  var p = new URLSearchParams(location.search);
+  p.set('el', view.el); p.set('lv', view.lv); p.set('cam', view.cam);
+  if (view.spot) p.delete('spot'); else p.set('spot', '0');
+  history.replaceState(null, '', '?' + p.toString());
+}
+
+function buildElementGrid() {
+  var grid = document.getElementById('elGrid');
+  HABITAT_ELEMENTS.forEach(function (e, i) {
+    var b = document.createElement('button');
+    b.className = 'chip'; b.dataset.el = e.id; b.disabled = !HABITATS.has(e.id);
+    b.title = e.name + (b.disabled ? ' (not designed yet)' : '');
+    b.innerHTML = '<span class="dot" style="background:' + e.color + ';color:' + e.color + '"></span>' + e.name + '<span class="n">#' + (i + 1) + '</span>';
+    b.addEventListener('click', function () { view.el = e.id; clampLevel(); refresh(); });
+    grid.appendChild(b);
+  });
+}
+
+function buildLevelButtons() {
+  var g = document.getElementById('lvGroup');
+  for (var i = 1; i <= HABITAT_MAX_LEVEL; i++) g.insertAdjacentHTML('beforeend', '<button class="btn" data-lv="' + i + '">' + i + '</button>');
+  g.insertAdjacentHTML('beforeend', '<button class="btn" data-lv="all" title="All designed levels side by side">All</button>');
+  g.addEventListener('click', function (ev) { var b = ev.target.closest('[data-lv]'); if (b && !b.disabled) { view.lv = b.dataset.lv; refresh(); } });
+  document.getElementById('camGroup').addEventListener('click', function (ev) { var b = ev.target.closest('[data-cam]'); if (b) { view.cam = b.dataset.cam; syncUrl(); updateUi(); fitCamera(levelsToShow(HABITATS.get(view.el)).length); } });
+  document.getElementById('spotBtn').addEventListener('click', function () {
+    view.spot = !view.spot; spotMarkers.forEach(function (m) { m.visible = view.spot; }); syncUrl(); updateUi();
+  });
+}
+
+// Keep the chosen level inside what this habitat has designed.
+function clampLevel() {
+  var def = HABITATS.get(view.el);
+  if (def && view.lv !== 'all' && +view.lv > def.levels) view.lv = String(def.levels);
+}
+
+function updateUi() {
+  var def = HABITATS.get(view.el), e = HABITAT_ELEMENTS.filter(function (x) { return x.id === view.el; })[0];
+  if (!def || !e) return;
+  var nr = HABITAT_ELEMENTS.indexOf(e) + 1;
+  var name = document.getElementById('elName'); name.textContent = '#' + nr + ' ' + e.name; name.style.color = e.color;
+  document.getElementById('elMeta').innerHTML = 'Unlocks at <b>player Lv ' + e.lv + '</b> · build from <b>Town Hall ' + e.th + '</b><br>' +
+    'Designed: <b>level ' + def.levels + ' of ' + HABITAT_MAX_LEVEL + '</b> · level N holds N dragons';
+  document.getElementById('elIdea').textContent = 'Inspiration: ' + e.idea;
+  document.querySelectorAll('.chip').forEach(function (c) { c.classList.toggle('on', c.dataset.el === view.el); });
+  document.querySelectorAll('[data-lv]').forEach(function (b) {
+    b.disabled = b.dataset.lv !== 'all' && +b.dataset.lv > def.levels;
+    b.title = b.disabled ? 'Level ' + b.dataset.lv + ' not designed yet' : (b.dataset.lv === 'all' ? 'All designed levels side by side' : 'Level ' + b.dataset.lv);
+    b.classList.toggle('on', b.dataset.lv === view.lv);
+  });
+  document.querySelectorAll('[data-cam]').forEach(function (b) { b.classList.toggle('on', b.dataset.cam === view.cam); });
+  document.getElementById('spotBtn').classList.toggle('on', view.spot);
+  document.title = 'Habitat Gallery · ' + e.name + (view.lv === 'all' ? ' · all levels' : ' · level ' + view.lv);
+}
+
+function refresh() { syncUrl(); updateUi(); rebuild(); }
+
+/* ============================ Start ============================ */
+buildElementGrid();
+buildLevelButtons();
+clampLevel();
+refresh();
+
+var clock = new THREE.Clock(), v = new THREE.Vector3();
+(function loop() {
+  var dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime;
+  controls.update();
+  K3.anims.forEach(function (fn) { fn(t, dt); });
+  tags.forEach(function (tg) {   // keep each level tag under its plot
+    v.copy(tg.pos).project(camera);
+    tg.el.style.display = v.z > 1 ? 'none' : '';
+    tg.el.style.left = ((v.x + 1) / 2 * innerWidth) + 'px'; tg.el.style.top = ((1 - v.y) / 2 * innerHeight) + 'px';
+  });
+  R3.render();
+  requestAnimationFrame(loop);
+})();
+})();
+</script>
+</body>
+</html>
